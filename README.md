@@ -34,7 +34,7 @@ pipeline'ı (bugün sentetik veri üreticisi, ileride SAP) üzerinden gerçekle�
 
 Servisler arasında bind mount **yoktur** — imajlar build anında kaynağı içine
 gömer. Bir dosyayı değiştirmek, ilgili servisi yeniden build etmeden
-konteynerde hiçbir etki yaratmaz (bkz. [CLAUDE.md](CLAUDE.md)).
+konteynerde hiçbir etki yaratmaz.
 
 ```
 frontend (Nginx :80, host :8080)

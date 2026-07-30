@@ -52,3 +52,4 @@ desktop.ini
 
 # --- Claude Code (bu makineye özel yerel ayarlar) ---
 .claude/settings.local.json
+CLAUDE.md
