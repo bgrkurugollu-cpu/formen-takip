@@ -1,0 +1,258 @@
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
+from app.core.turkish import turkish_sort_key
+from app.db.session import get_db
+from app.models.foreman import Chief, Foreman, ForemanAssignment
+from app.models.kpi import Kpi
+from app.models.organization import Factory, Plant, Shift
+from app.schemas.common import Filters, PageParams, common_filters, page_params
+from app.services import analytics
+from app.services.kpi_engine import resolve_performance_level
+from app.services.level_lookup import get_performance_levels, level_to_dict
+
+router = APIRouter(prefix="/chiefs", tags=["chiefs"])
+
+
+def _chiefs_in_scope(db: Session, filters: Filters, search: str | None, is_active: bool | None):
+    query = select(Chief)
+    if search:
+        query = query.where(
+            Chief.first_name.ilike(f"%{search}%")
+            | Chief.last_name.ilike(f"%{search}%")
+            | Chief.employee_number.ilike(f"%{search}%")
+        )
+    if is_active is not None:
+        query = query.where(Chief.is_active == is_active)
+    if filters.chief_ids:
+        query = query.where(Chief.id.in_(filters.chief_ids))
+    if filters.plant_ids:
+        query = query.where(Chief.plant_id.in_(filters.plant_ids))
+    if filters.factory_ids:
+        query = query.where(
+            Chief.plant_id.in_(select(Plant.id).where(Plant.factory_id.in_(filters.factory_ids)))
+        )
+
+    query = query.where(
+        Chief.id.in_(
+            select(ForemanAssignment.chief_id).where(
+                ForemanAssignment.start_date <= filters.date_to,
+                (ForemanAssignment.end_date.is_(None)) | (ForemanAssignment.end_date >= filters.date_from),
+            )
+        )
+    )
+    return list(db.scalars(query))
+
+
+@router.get("")
+def list_chiefs(
+    search: str | None = Query(None),
+    plant_id: UUID | None = Query(None),
+    is_active: bool | None = Query(None),
+    sort_by: str = Query("name", pattern="^(name|employee_number|plant|factory|foreman_count|score|level|reliability)$"),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
+    page: PageParams = Depends(page_params),
+    filters: Filters = Depends(common_filters),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+) -> dict:
+    if plant_id:
+        filters.plant_ids = [plant_id]
+
+    levels = get_performance_levels(db)
+    chiefs = _chiefs_in_scope(db, filters, search, is_active)
+
+    teams_by_chief = {t.chief_id: t for t in analytics.chief_team_scores(db, filters)}
+    plants_by_id = {p.id: p for p in db.scalars(select(Plant))}
+    factories_by_id = {f.id: f for f in db.scalars(select(Factory))}
+
+    full_items = []
+    for c in chiefs:
+        team = teams_by_chief.get(c.id)
+        score = team.total_score if team else 0.0
+        plant = plants_by_id.get(c.plant_id)
+        factory = factories_by_id.get(plant.factory_id) if plant else None
+        level = resolve_performance_level(score, levels)
+        full_items.append(
+            {
+                "id": str(c.id),
+                "employee_number": c.employee_number,
+                "full_name": f"{c.first_name} {c.last_name}",
+                "is_active": c.is_active,
+                "plant": {"id": str(plant.id), "name": plant.name} if plant else None,
+                "factory": {"id": str(factory.id), "code": factory.code, "name": factory.name} if factory else None,
+                "foreman_count": team.foreman_count if team else 0,
+                "total_score": round(score, 2),
+                "is_reliable": team.is_reliable if team else False,
+                "level": level_to_dict(level),
+                "_sort": {
+                    "name": (turkish_sort_key(c.first_name), turkish_sort_key(c.last_name)),
+                    "employee_number": c.employee_number,
+                    "plant": plant.sequence_number if plant else -1,
+                    "factory": turkish_sort_key(factory.code) if factory else (),
+                    "foreman_count": team.foreman_count if team else 0,
+                    "score": score,
+                    "level": level.sort_order,
+                    "reliability": team.is_reliable if team else False,
+                },
+            }
+        )
+
+    full_items.sort(key=lambda it: it["_sort"][sort_by], reverse=sort_dir == "desc")
+    for it in full_items:
+        del it["_sort"]
+
+    total = len(full_items)
+    start = (page.page - 1) * page.page_size
+    return {
+        "items": full_items[start : start + page.page_size],
+        "total": total,
+        "page": page.page,
+        "page_size": page.page_size,
+    }
+
+
+def _get_chief_or_404(db: Session, chief_id: UUID) -> Chief:
+    chief = db.get(Chief, chief_id)
+    if chief is None:
+        raise HTTPException(404, "Şef bulunamadı.")
+    return chief
+
+
+@router.get("/{chief_id}")
+def get_chief(
+    chief_id: UUID, filters: Filters = Depends(common_filters), db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> dict:
+    chief = _get_chief_or_404(db, chief_id)
+    levels = get_performance_levels(db)
+    plant = db.get(Plant, chief.plant_id)
+    factory = db.get(Factory, plant.factory_id) if plant else None
+
+    ranking_filters = Filters(date_from=filters.date_from, date_to=filters.date_to, shift_ids=filters.shift_ids, kpi_ids=filters.kpi_ids)
+    all_teams = analytics.chief_team_scores(db, ranking_filters)
+    my_team = next((t for t in all_teams if t.chief_id == chief_id), None)
+    score = my_team.total_score if my_team else 0.0
+
+    ranked = sorted(all_teams, key=lambda t: t.total_score, reverse=True)
+    company_rank = next((i + 1 for i, t in enumerate(ranked) if t.chief_id == chief_id), None)
+
+    plant_chief_ids = {c.id for c in db.scalars(select(Chief).where(Chief.plant_id == chief.plant_id))}
+    plant_ranked = [t for t in ranked if t.chief_id in plant_chief_ids]
+    plant_rank = next((i + 1 for i, t in enumerate(plant_ranked) if t.chief_id == chief_id), None)
+
+    return {
+        "id": str(chief.id),
+        "employee_number": chief.employee_number,
+        "full_name": f"{chief.first_name} {chief.last_name}",
+        "hire_date": chief.hire_date.isoformat(),
+        "is_active": chief.is_active,
+        "plant": {"id": str(plant.id), "name": plant.name} if plant else None,
+        "factory": {"id": str(factory.id), "code": factory.code, "name": factory.name} if factory else None,
+        "foreman_count": my_team.foreman_count if my_team else 0,
+        "total_score": round(score, 2),
+        "is_reliable": my_team.is_reliable if my_team else False,
+        "level": level_to_dict(resolve_performance_level(score, levels)),
+        "company_rank": company_rank,
+        "company_total": len(ranked),
+        "plant_rank": plant_rank,
+        "plant_total": len(plant_ranked),
+    }
+
+
+@router.get("/{chief_id}/foremen")
+def chief_foremen(
+    chief_id: UUID, filters: Filters = Depends(common_filters), db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> dict:
+    _get_chief_or_404(db, chief_id)
+    filters.chief_ids = [chief_id]
+    levels = get_performance_levels(db)
+
+    team = next((t for t in analytics.chief_team_scores(db, filters) if t.chief_id == chief_id), None)
+    scores = team.foreman_scores if team else []
+    foremen_by_id = (
+        {f.id: f for f in db.scalars(select(Foreman).where(Foreman.id.in_([s.key for s in scores])))} if scores else {}
+    )
+    shifts_by_id = {s.id: s for s in db.scalars(select(Shift))}
+    shift_by_foreman = {
+        a.foreman_id: shifts_by_id.get(a.shift_id)
+        for a in db.scalars(
+            select(ForemanAssignment).where(
+                ForemanAssignment.chief_id == chief_id,
+                ForemanAssignment.start_date <= filters.date_to,
+                (ForemanAssignment.end_date.is_(None)) | (ForemanAssignment.end_date >= filters.date_from),
+            ).order_by(ForemanAssignment.start_date)
+        )
+    }
+
+    items = []
+    for s in sorted(scores, key=lambda x: x.total_score, reverse=True):
+        f = foremen_by_id.get(s.key)
+        shift = shift_by_foreman.get(s.key)
+        items.append(
+            {
+                "id": str(s.key),
+                "employee_number": f.employee_number if f else None,
+                "full_name": f"{f.first_name} {f.last_name}" if f else None,
+                "shift": {"id": str(shift.id), "name": shift.name} if shift else None,
+                "total_score": round(s.total_score, 2),
+                "is_reliable": s.is_reliable,
+                "level": level_to_dict(resolve_performance_level(s.total_score, levels)),
+            }
+        )
+    return {"items": items}
+
+
+@router.get("/{chief_id}/kpis")
+def chief_kpis(
+    chief_id: UUID, filters: Filters = Depends(common_filters), db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> dict:
+    _get_chief_or_404(db, chief_id)
+    filters.chief_ids = [chief_id]
+
+    rows = analytics.kpi_breakdown(db, filters)
+    kpis_by_id = {k.id: k for k in db.scalars(select(Kpi))}
+
+    items = []
+    for row in rows:
+        kpi = kpis_by_id.get(row["kpi_id"])
+        if kpi is None:
+            continue
+        items.append(
+            {
+                "kpi_id": str(row["kpi_id"]), "code": kpi.code, "name": kpi.name, "unit": kpi.unit,
+                "avg_target": round(float(row["avg_target"]), kpi.decimal_places) if row["avg_target"] is not None else None,
+                "avg_actual": round(float(row["avg_actual"]), kpi.decimal_places) if row["avg_actual"] is not None else None,
+                "avg_raw_score": round(float(row["avg_raw_score"]), 2),
+                "avg_capped_score": round(float(row["avg_capped_score"]), 2),
+                "weight": float(row["weight"]),
+                "weighted_contribution_sum": round(float(row["contrib_sum"]), 2),
+                "record_count": row["record_count"],
+            }
+        )
+    items.sort(key=lambda i: kpis_by_id[UUID(i["kpi_id"])].display_order)
+    return {"items": items}
+
+
+@router.get("/{chief_id}/trend")
+def chief_trend(
+    chief_id: UUID,
+    granularity: str = Query("day", pattern="^(day|week|month|quarter|year)$"),
+    filters: Filters = Depends(common_filters),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+) -> dict:
+    _get_chief_or_404(db, chief_id)
+    filters.chief_ids = [chief_id]
+    points = analytics.trend(db, filters, granularity)
+    return {
+        "granularity": granularity,
+        "points": [
+            {"date": p.bucket.isoformat(), "total_score": round(p.total_score, 2), "is_reliable": p.is_reliable}
+            for p in points
+        ],
+    }

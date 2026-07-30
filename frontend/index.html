@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Formen Performans Takip Sistemi</title>
+    <script>
+      // Tema seçimini React yüklenmeden ÖNCE uygula ki sayfa açılışında
+      // yanlış temanın kısa süreliğine görünmesi (flash) engellensin.
+      (function () {
+        var stored = localStorage.getItem("formen_theme");
+        document.documentElement.dataset.theme = stored === "light" ? "light" : "dark";
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

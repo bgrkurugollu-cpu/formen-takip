@@ -1,0 +1,36 @@
+import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { KpiSummaryItem } from "../../api/types";
+import { accentLineColor, resolveChartInk } from "../../lib/chartColors";
+import { useTheme } from "../../context/ThemeContext";
+import { EmptyState } from "../StateViews";
+
+export function KpiBarChart({ items }: { items: KpiSummaryItem[] }) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  const ink = resolveChartInk(isDark);
+
+  if (items.length === 0) return <EmptyState />;
+
+  const data = items.map((i) => ({ name: i.name, score: i.avg_score, unit: i.unit }));
+
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} margin={{ top: 8, right: 16, left: -8, bottom: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={ink.grid} vertical={false} />
+        <XAxis dataKey="name" tick={{ fontSize: 11, fill: ink.muted }} tickLine={false} axisLine={{ stroke: ink.axis }} interval={0} angle={-15} textAnchor="end" height={50} />
+        <YAxis tick={{ fontSize: 11, fill: ink.muted }} tickLine={false} axisLine={false} width={36} />
+        <ReferenceLine y={100} stroke={ink.muted} strokeDasharray="4 4" />
+        <Tooltip
+          formatter={(value) => [Number(value).toFixed(1), "Ortalama KPI Puanı"]}
+          contentStyle={{
+            fontSize: 12, borderRadius: 8, border: `1px solid ${ink.grid}`,
+            background: isDark ? "#1a2333" : "#ffffff", color: ink.primary,
+          }}
+          labelStyle={{ color: ink.primary }}
+          itemStyle={{ color: ink.primary }}
+        />
+        <Bar dataKey="score" fill={accentLineColor(isDark)} radius={[4, 4, 0, 0]} barSize={40} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}

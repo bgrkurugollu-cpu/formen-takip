@@ -1,0 +1,54 @@
+# --- Ortam / gizli bilgi dosyaları ---
+# .env dosyaları gerçek (yerel) yapılandırma taşır; yalnızca .env.example şablonları
+# repoya dahil edilir.
+.env
+.env.*
+!.env.example
+!backend/.env.example
+
+# --- Python (backend) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+playwright-report/
+test-results/
+
+# --- Loglar ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Editör / IDE ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- İşletim sistemi ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Claude Code (bu makineye özel yerel ayarlar) ---
+.claude/settings.local.json

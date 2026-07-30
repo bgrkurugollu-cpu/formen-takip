@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* İki tema: "dark" (koyu lacivert kenar çubuklu — varsayılan) ve "light"
+   (tamamen beyaz arka planlı). Tema, ThemeContext tarafından <html> üzerine
+   yazılan data-theme özniteliğiyle seçilir; OS tercihine göre otomatik
+   geçiş YOKTUR — kullanıcı kontrolü tam manueldir. */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --page-bg: #0a0e1a;
+  --surface: #111827;
+  --surface-raised: #1a2333;
+  --border: #1f2937;
+  --border-strong: #334155;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-subtle: #172554;
+
+  --sidebar-bg: #0f172a;
+  --sidebar-border: #1e293b;
+  --sidebar-heading: #ffffff;
+  --sidebar-subtext: #64748b;
+  --sidebar-text: #94a3b8;
+  --sidebar-text-hover: #f1f5f9;
+  --sidebar-active-bg: #1e293b;
+  --sidebar-text-active: #ffffff;
+  --sidebar-muted: #475569;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --page-bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+
+  /* Kurumsal marka vurgusu — kontrollü kullanım için bkz. bileşenlerdeki
+     var(--accent) referansları: butonlar, aktif menü/sekme, seçili filtreler,
+     ana grafik serisi, focus halkası. Zemin renkleri (beyaz/gri) değişmez. */
+  --accent: #e90128;
+  --accent-hover: #c2011f;
+  --accent-subtle: #fdecee;
+
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #e5e7eb;
+  --sidebar-heading: #111827;
+  --sidebar-subtext: #9ca3af;
+  --sidebar-text: #4b5563;
+  --sidebar-text-hover: #e90128;
+  --sidebar-active-bg: #fdecee;
+  --sidebar-text-active: #e90128;
+  --sidebar-muted: #d1d5db;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, Roboto, sans-serif;
+  font-size: 14px;
+  background: var(--page-bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Kurumsal, düz form kontrolleri — tarayıcı varsayılan görünümünü sadeleştirir. */
+input,
+select,
+textarea {
+  accent-color: var(--accent);
+}

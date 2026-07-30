@@ -1,0 +1,16 @@
+# Metin dosyalarında satır sonlarını otomatik normalize et (Windows geliştirme
+# ortamından farklı işletim sistemlerine taşınırken CRLF/LF tutarsızlığını önler).
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# İkili dosyalar — satır sonu dönüştürmesi uygulanmamalı
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
