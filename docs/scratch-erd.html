@@ -1,0 +1,1295 @@
+<title>Formen Takip — Veritabanı ERD</title>
+<style>
+  @font-face { font-family: 'system-mono'; src: local("Cascadia Code"), local("SF Mono"), local("Consolas"); }
+
+  :root {
+    --bg: #eef2f9;
+    --surface: #ffffff;
+    --surface-2: #f5f8fd;
+    --ink: #16233d;
+    --muted: #5b6b85;
+    --accent: #1d5fd1;
+    --accent-warm: #b5651d;
+    --line: #ccd7ea;
+    --grid: rgba(29,95,209,0.07);
+    --code-bg: #0f1d33;
+    --code-ink: #dce6f7;
+    --shadow: 0 1px 2px rgba(22,35,61,0.06), 0 8px 24px rgba(22,35,61,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a1930;
+      --surface: #0f2242;
+      --surface-2: #13294e;
+      --ink: #eaf1ff;
+      --muted: #93a8ca;
+      --accent: #6fb7ff;
+      --accent-warm: #ffb454;
+      --line: #274674;
+      --grid: rgba(111,183,255,0.08);
+      --code-bg: #061021;
+      --code-ink: #d7e4fb;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a1930; --surface: #0f2242; --surface-2: #13294e; --ink: #eaf1ff; --muted: #93a8ca;
+    --accent: #6fb7ff; --accent-warm: #ffb454; --line: #274674; --grid: rgba(111,183,255,0.08);
+    --code-bg: #061021; --code-ink: #d7e4fb; --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #eef2f9; --surface: #ffffff; --surface-2: #f5f8fd; --ink: #16233d; --muted: #5b6b85;
+    --accent: #1d5fd1; --accent-warm: #b5651d; --line: #ccd7ea; --grid: rgba(29,95,209,0.07);
+    --code-bg: #0f1d33; --code-ink: #dce6f7; --shadow: 0 1px 2px rgba(22,35,61,0.06), 0 8px 24px rgba(22,35,61,0.05);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0 0 5rem;
+  }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    padding: 1rem 1.5rem;
+  }
+  .topbar-inner {
+    max-width: 76rem; margin: 0 auto;
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.75rem 2rem;
+  }
+  .brand { display: flex; align-items: baseline; gap: 0.6rem; }
+  .brand-mark {
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 0.75rem; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 3px;
+    padding: 0.1rem 0.4rem; letter-spacing: 0.06em;
+  }
+  h1 { font-size: 1.15rem; margin: 0; font-weight: 650; letter-spacing: -0.01em; text-wrap: balance; }
+  .meta {
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 0.72rem; color: var(--muted); display: flex; gap: 1.1rem; flex-wrap: wrap;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+  nav.jump { display: flex; gap: 1.1rem; }
+  nav.jump a {
+    font-size: 0.78rem; color: var(--muted); text-decoration: none;
+    border-bottom: 1px solid transparent; padding-bottom: 2px;
+  }
+  nav.jump a:hover, nav.jump a:focus-visible { color: var(--accent); border-color: var(--accent); }
+
+  main { max-width: 76rem; margin: 0 auto; padding: 2.2rem 1.5rem 0; }
+
+  section.sheet { margin-bottom: 3rem; scroll-margin-top: 5.5rem; }
+  .sheet-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+    margin-bottom: 0.9rem; flex-wrap: wrap;
+  }
+  .eyebrow {
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  .sheet-head h2 { font-size: 1.3rem; margin: 0.15rem 0 0; font-weight: 650; text-wrap: balance; }
+  .sheet-note { font-size: 0.82rem; color: var(--muted); max-width: 42rem; }
+
+  .panel {
+    background:
+      radial-gradient(var(--grid) 1px, transparent 1px) 0 0/16px 16px,
+      var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .panel-bar span {
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 0.72rem; color: var(--muted);
+  }
+  .copy-btn {
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 0.72rem; color: var(--accent);
+    background: transparent; border: 1px solid var(--accent);
+    border-radius: 5px; padding: 0.28rem 0.6rem; cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .copy-btn:hover { background: var(--accent); color: var(--surface); }
+  .copy-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .diagram-scroll { overflow: auto; padding: 1.4rem; max-height: 82vh; }
+  pre.mermaid {
+    margin: 0; background: transparent !important;
+    /* JS bu kutunun genişlik/yüksekliğini zoom seviyesine göre ayarlar, böylece
+       içindeki transform: scale() ile büyütülen SVG için kaydırma alanı doğru hesaplanır. */
+    width: fit-content;
+  }
+  pre.mermaid svg {
+    max-width: none !important;
+    display: block;
+    transform-origin: top left;
+  }
+
+  .zoom-controls { display: flex; align-items: center; gap: 0.35rem; }
+  .zoom-btn {
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 0.8rem; line-height: 1; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 5px; width: 1.7rem; height: 1.7rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .zoom-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .zoom-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .zoom-level {
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 0.72rem; color: var(--muted); min-width: 3.2em; text-align: center;
+  }
+
+  .code-scroll { overflow: auto; max-height: 82vh; }
+  pre.code {
+    margin: 0; padding: 1.1rem 1.3rem;
+    background: var(--code-bg); color: var(--code-ink);
+    font-family: "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+    font-size: 0.78rem; line-height: 1.6; white-space: pre; tab-size: 2;
+  }
+  .code-scroll::-webkit-scrollbar, .diagram-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
+  .code-scroll::-webkit-scrollbar-thumb, .diagram-scroll::-webkit-scrollbar-thumb {
+    background: var(--line); border-radius: 6px;
+  }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin: 0.8rem 0 1.1rem;
+    font-family: "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 0.72rem; color: var(--muted);
+  }
+  .legend b { color: var(--ink); }
+
+  footer {
+    max-width: 76rem; margin: 3rem auto 0; padding: 1.2rem 1.5rem 0;
+    border-top: 1px solid var(--line); font-size: 0.76rem; color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    .diagram-scroll, .code-scroll { max-height: 60vh; }
+  }
+</style>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">ERD</span>
+      <h1>Formen Performans Takip Sistemi — Veritabanı Şeması</h1>
+    </div>
+    <nav class="jump">
+      <a href="#tam-erd">Tam ERD</a>
+      <a href="#dbml">DBML</a>
+      <a href="#sade">Sade Şema</a>
+    </nav>
+  </div>
+  <div class="topbar-inner" style="margin-top:0.4rem;">
+    <div class="meta">
+      <span>Kaynak: <b>canlı PostgreSQL introspection</b></span>
+      <span>Alembic: <b>c7a1f9d0b2e3</b> (head)</span>
+      <span>Şema: <b>public</b></span>
+      <span>24 tablo (23 iş + 1 teknik)</span>
+    </div>
+  </div>
+</div>
+
+<main>
+
+  <section class="sheet" id="tam-erd">
+    <div class="sheet-head">
+      <div>
+        <div class="eyebrow">1 · Tam ER Diyagramı</div>
+        <h2>Tüm tablolar, anahtar kolonlar ve ilişkiler</h2>
+      </div>
+    </div>
+    <div class="sheet-note">
+      PK/FK/UK anahtar kolonların tamamını, iş açısından anlamlı diğer kolonları içerir. <code>created_at</code>/<code>updated_at</code> her tabloda NOT NULL olarak bulunur, tekrarı önlemek için kutulara yazılmadı.
+    </div>
+    <div class="legend">
+      <span><b>PK</b> primary key</span>
+      <span><b>FK</b> foreign key</span>
+      <span><b>UK</b> unique</span>
+      <span><b>"NN"</b> not null</span>
+      <span><b>||--o{</b> bire-çok</span>
+      <span><b>||--o|</b> bire-bir (opsiyonel)</span>
+      <span><b>o|--o{</b> nullable FK</span>
+    </div>
+    <div class="panel">
+      <div class="panel-bar">
+        <span>mermaid · erDiagram · 24 entity, 38 ilişki</span>
+        <div class="zoom-controls">
+          <button class="zoom-btn" onclick="zoomCtl['diagram-full'].out()" aria-label="Uzaklaştır">−</button>
+          <span class="zoom-level" id="zoom-level-diagram-full">100%</span>
+          <button class="zoom-btn" onclick="zoomCtl['diagram-full'].in()" aria-label="Yakınlaştır">+</button>
+          <button class="zoom-btn" style="width:auto;padding:0 0.5rem;" onclick="zoomCtl['diagram-full'].reset()">Sığdır</button>
+          <button class="copy-btn" onclick="copyBlock('src-full-mermaid', this)">Kopyala</button>
+        </div>
+      </div>
+      <div class="diagram-scroll" id="diagram-full">
+        <pre class="mermaid" id="src-full-mermaid">
+erDiagram
+    %% ================= ORGANIZASYON VE PERSONEL =================
+    factories {
+        uuid id PK
+        varchar_20 code UK "NN"
+        varchar_200 name "NN"
+        varchar_100 location "NN"
+        boolean is_active "NN"
+    }
+    plants {
+        uuid id PK
+        varchar_20 code UK "NN"
+        integer sequence_number UK "NN"
+        uuid factory_id FK "NN"
+        varchar_200 name "NN"
+        boolean is_active "NN"
+        varchar_20 sap_plant_code "nullable"
+    }
+    shifts {
+        uuid id PK
+        varchar_20 code UK "NN"
+        varchar_100 name "NN"
+        time start_time "NN"
+        time end_time "NN"
+        integer sequence "NN"
+        boolean crosses_midnight "NN"
+        boolean is_active "NN"
+    }
+    chiefs {
+        uuid id PK "birlikte plant_id ile UK: uq_chiefs_id_plant_id"
+        varchar_30 employee_number UK "NN"
+        uuid plant_id FK "NN"
+        varchar_100 first_name "NN"
+        varchar_100 last_name "NN"
+        date hire_date "NN"
+        boolean is_active "NN"
+        varchar_30 sap_personnel_number "nullable"
+    }
+    foremen {
+        uuid id PK
+        varchar_30 employee_number UK "NN"
+        varchar_100 first_name "NN"
+        varchar_100 last_name "NN"
+        date hire_date "NN"
+        date termination_date "nullable"
+        boolean is_active "NN"
+        varchar_30 sap_personnel_number "nullable"
+    }
+    foreman_assignments {
+        uuid id PK
+        uuid foreman_id FK "NN"
+        uuid plant_id FK "NN, bileşik FK'nin de parçası"
+        uuid chief_id FK "NN, bileşik FK'nin de parçası"
+        uuid shift_id FK "NN"
+        date start_date "NN"
+        date end_date "nullable"
+        boolean is_active "NN"
+    }
+    production_lines {
+        uuid id PK
+        varchar_30 code UK "NN"
+        varchar_200 name "NN"
+        uuid plant_id FK "NN"
+        boolean is_active "NN"
+    }
+    foreman_work_calendar {
+        uuid id PK
+        uuid foreman_id FK "NN, birlikte work_date ile UK"
+        date work_date "NN"
+        uuid plant_id FK "NN"
+        uuid chief_id FK "NN"
+        uuid shift_id FK "NN"
+        uuid line_id FK "NN"
+        boolean is_working "NN"
+    }
+    company_calendar {
+        uuid id PK
+        date calendar_date UK "NN"
+        boolean is_holiday "NN"
+        varchar_200 note "nullable"
+    }
+
+    %% ================= URUN VE KPI TANIMI =================
+    products {
+        uuid id PK
+        varchar_30 code UK "NN"
+        varchar_200 name "NN"
+        varchar_20 unit "NN"
+        numeric_10_3 standard_gram "nullable"
+        numeric_10_3 lower_gram_limit "nullable"
+        numeric_10_3 upper_gram_limit "nullable"
+        boolean is_active "NN"
+    }
+    kpis {
+        uuid id PK
+        varchar_30 code UK "NN"
+        varchar_200 name "NN"
+        varchar_30 unit "NN"
+        enum_calculation_type calculation_type "NN"
+        boolean success_direction_higher "NN"
+        numeric_12_4 default_target_value "NN"
+        numeric_12_2 min_score "NN"
+        numeric_12_2 max_score "NN"
+        numeric_5_2 weight "NN"
+        boolean is_active "NN"
+        integer display_order "NN"
+    }
+    kpi_calculation_rules {
+        uuid id PK
+        uuid kpi_id FK "NN"
+        integer version "NN"
+        enum_calc_rule_type calculation_type "NN"
+        json parameters "NN"
+        boolean is_active "NN"
+    }
+    kpi_targets {
+        uuid id PK
+        uuid kpi_id FK "NN"
+        enum_target_scope_type scope_type "NN"
+        uuid scope_id "nullable, polimorfik - fiziksel FK degil"
+        numeric_12_4 target_value "NN"
+        boolean is_active "NN"
+    }
+    performance_level_rules {
+        uuid id PK
+        varchar_50 name UK "NN"
+        numeric_6_2 min_score "NN"
+        numeric_6_2 max_score "NN"
+        integer sort_order "NN"
+    }
+
+    %% ================= URETIM VE PERFORMANS =================
+    production_records {
+        uuid id PK
+        enum_production_source_system source_system "NN"
+        varchar_100 source_record_id UK "NN, birlikte source_system ile"
+        varchar_50 production_order_number "NN"
+        uuid plant_id FK "NN"
+        uuid line_id FK "NN"
+        uuid product_id FK "NN"
+        uuid foreman_id FK "NN, UK dogal anahtarin parcasi"
+        uuid chief_id FK "NN"
+        uuid shift_id FK "NN, UK dogal anahtarin parcasi"
+        date production_date "NN, UK dogal anahtarin parcasi"
+        numeric_14_4 planned_qty "nullable"
+        numeric_14_4 actual_qty "nullable"
+        timestamptz planned_start_at "nullable"
+        timestamptz planned_end_at "nullable"
+        numeric_10_3 measured_avg_gram "nullable"
+        numeric_14_4 gsf_qty "nullable"
+        numeric_14_4 iskarta_qty "nullable"
+        numeric_10_2 planned_downtime_minutes "nullable"
+        numeric_10_2 unplanned_downtime_minutes "nullable"
+    }
+    performance_records {
+        uuid id PK
+        enum_source_system source_system "NN"
+        varchar_100 source_record_id UK "NN, birlikte source_system ile"
+        uuid integration_run_id FK "NN"
+        uuid plant_id FK "NN"
+        uuid chief_id FK "NN"
+        uuid shift_id FK "NN, UK dogal anahtarin parcasi"
+        uuid foreman_id FK "NN, UK dogal anahtarin parcasi"
+        uuid kpi_id FK "NN, UK dogal anahtarin parcasi"
+        date performance_date "NN, UK dogal anahtarin parcasi"
+        numeric_14_4 target_value "nullable"
+        numeric_14_4 actual_value "nullable"
+        numeric_14_4 numerator_value "nullable"
+        numeric_14_4 denominator_value "nullable"
+        enum_data_quality_status data_quality_status "NN"
+        uuid production_record_id FK "nullable, ON DELETE SET NULL"
+    }
+    performance_scores {
+        uuid id PK
+        uuid performance_record_id FK "NN, UK - 1:1 iliski"
+        uuid calculation_rule_id FK "NN"
+        numeric_14_3 raw_score "NN"
+        numeric_14_3 capped_score "NN"
+        numeric_5_2 kpi_weight "NN"
+        numeric_14_3 weighted_contribution "NN"
+        integer calculation_version "NN"
+    }
+
+    %% ================= ENTEGRASYON VE VERI KALITESI =================
+    integration_runs {
+        uuid id PK
+        enum_run_source_system source_system "NN"
+        timestamptz started_at "NN"
+        timestamptz finished_at "nullable"
+        enum_integration_status status "NN"
+        integer processed_count "NN"
+        integer success_count "NN"
+        integer error_count "NN"
+        integer skipped_count "NN"
+    }
+    data_quality_issues {
+        uuid id PK
+        uuid performance_record_id FK "nullable"
+        enum_issue_type issue_type "NN"
+        varchar_1000 description "NN"
+        timestamptz detected_at "NN"
+        varchar_30 status "NN, enum degil duz metin"
+    }
+
+    %% ================= KULLANICI VE DIGER SISTEM TABLOLARI =================
+    users {
+        uuid id PK
+        varchar_255 email UK "NN"
+        varchar_200 password_hash "NN"
+        varchar_200 full_name "NN"
+        boolean is_active "NN"
+        integer failed_login_attempts "NN"
+    }
+    audit_logs {
+        uuid id PK
+        uuid user_id FK "nullable"
+        varchar_100 action "NN"
+        varchar_100 entity "nullable"
+        boolean success "NN"
+    }
+    action_plans {
+        uuid id PK
+        varchar_300 title "NN"
+        uuid plant_id FK "nullable"
+        uuid shift_id FK "nullable"
+        uuid foreman_id FK "nullable"
+        uuid kpi_id FK "nullable"
+        uuid chief_id FK "nullable"
+        uuid created_by_user_id FK "NN"
+        enum_action_plan_priority priority "NN"
+        enum_action_plan_status status "NN"
+        integer completion_percentage "NN"
+    }
+    report_exports {
+        uuid id PK
+        enum_report_type report_type "NN"
+        enum_report_format format "NN"
+        json filters_json "NN"
+        uuid requested_by_user_id FK "NN"
+        varchar_300 file_name "NN"
+        bytea file_content "NN"
+        enum_report_status status "NN"
+    }
+
+    %% ================= TEKNIK (IS MODELI DISI) =================
+    alembic_version {
+        varchar_32 version_num PK
+    }
+
+    %% ================= ILISKILER: ORGANIZASYON / PERSONEL =================
+    factories        ||--o{ plants                 : "factory_id"
+    plants           ||--o{ chiefs                 : "plant_id"
+    plants           ||--o{ foreman_assignments     : "plant_id"
+    chiefs           ||--o{ foreman_assignments     : "bileşik FK (chief_id,plant_id)→(id,plant_id)"
+    foremen          ||--o{ foreman_assignments     : "foreman_id"
+    shifts           ||--o{ foreman_assignments     : "shift_id"
+    plants           ||--o{ production_lines        : "plant_id"
+    foremen          ||--o{ foreman_work_calendar    : "foreman_id"
+    plants           ||--o{ foreman_work_calendar    : "plant_id"
+    chiefs           ||--o{ foreman_work_calendar    : "chief_id"
+    shifts           ||--o{ foreman_work_calendar    : "shift_id"
+    production_lines ||--o{ foreman_work_calendar    : "line_id"
+
+    %% ================= ILISKILER: URETIM =================
+    plants           ||--o{ production_records      : "plant_id"
+    production_lines ||--o{ production_records      : "line_id"
+    products         ||--o{ production_records      : "product_id"
+    foremen          ||--o{ production_records      : "foreman_id"
+    chiefs           ||--o{ production_records      : "chief_id"
+    shifts           ||--o{ production_records      : "shift_id"
+
+    %% ================= ILISKILER: KPI =================
+    kpis ||--o{ kpi_calculation_rules : "kpi_id"
+    kpis ||--o{ kpi_targets           : "kpi_id"
+    kpis ||--o{ performance_records   : "kpi_id"
+
+    %% ================= ILISKILER: PERFORMANS =================
+    plants                 ||--o{ performance_records : "plant_id"
+    chiefs                 ||--o{ performance_records : "chief_id"
+    shifts                 ||--o{ performance_records : "shift_id"
+    foremen                ||--o{ performance_records : "foreman_id"
+    integration_runs       ||--o{ performance_records : "integration_run_id"
+    production_records     o|--o{ performance_records : "production_record_id (nullable, ON DELETE SET NULL)"
+    performance_records     ||--o| performance_scores  : "performance_record_id (1:1, UNIQUE FK)"
+    kpi_calculation_rules  ||--o{ performance_scores  : "calculation_rule_id"
+
+    %% ================= ILISKILER: VERI KALITESI =================
+    performance_records o|--o{ data_quality_issues : "performance_record_id (nullable)"
+
+    %% ================= ILISKILER: KULLANICI / AKSIYON / RAPOR =================
+    users   ||--o{ action_plans   : "created_by_user_id"
+    plants  o|--o{ action_plans   : "plant_id (nullable)"
+    shifts  o|--o{ action_plans   : "shift_id (nullable)"
+    foremen o|--o{ action_plans   : "foreman_id (nullable)"
+    kpis    o|--o{ action_plans   : "kpi_id (nullable)"
+    chiefs  o|--o{ action_plans   : "chief_id (nullable)"
+    users   ||--o{ report_exports : "requested_by_user_id"
+    users   o|--o{ audit_logs     : "user_id (nullable)"
+        </pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet" id="dbml">
+    <div class="sheet-head">
+      <div>
+        <div class="eyebrow">2 · DBML Şeması</div>
+        <h2>dbdiagram.io için tam kolon dökümü</h2>
+      </div>
+    </div>
+    <div class="sheet-note">Tüm kolonlar, tipler, kısıtlar ve ilişkiler eksiksiz. <code>dbdiagram.io → New Diagram → Import</code> ile doğrudan yapıştırılabilir.</div>
+    <div class="panel">
+      <div class="panel-bar">
+        <span>dbml · 23 table, 15 enum, 38 ref</span>
+        <button class="copy-btn" onclick="copyBlock('src-dbml', this)">Kopyala</button>
+      </div>
+      <div class="code-scroll">
+<pre class="code" id="src-dbml">// ============================================================
+// Formen Performans Takip Sistemi — canli PostgreSQL semasi
+// Kaynak: information_schema/pg_catalog introspection
+// Alembic head: c7a1f9d0b2e3
+// ============================================================
+
+Enum calculation_type {
+  HIGHER_IS_BETTER
+  LOWER_IS_BETTER
+  RANGE_TARGET
+  DIRECT_SCORE
+  PROPORTIONAL_PENALTY
+  CUSTOM_FORMULA
+}
+
+Enum calc_rule_type {
+  HIGHER_IS_BETTER
+  LOWER_IS_BETTER
+  RANGE_TARGET
+  DIRECT_SCORE
+  PROPORTIONAL_PENALTY
+  CUSTOM_FORMULA
+}
+
+Enum aggregation_method {
+  SUM
+  AVERAGE
+  WEIGHTED_AVERAGE
+  MIN
+  MAX
+  LAST_VALUE
+  RATIO_RECOMPUTE
+}
+
+Enum target_scope_type {
+  COMPANY
+  PLANT
+  CHIEF
+  FOREMAN
+}
+
+Enum data_quality_status {
+  COMPLETE
+  MISSING
+  INVALID
+  SUSPICIOUS
+  DUPLICATE
+  NEEDS_SOURCE_CORRECTION
+  PENDING_RESYNC
+  REPROCESSED
+}
+
+Enum issue_type {
+  COMPLETE
+  MISSING
+  INVALID
+  SUSPICIOUS
+  DUPLICATE
+  NEEDS_SOURCE_CORRECTION
+  PENDING_RESYNC
+  REPROCESSED
+}
+
+Enum source_system {
+  SYNTHETIC
+  SAP
+}
+
+Enum run_source_system {
+  SYNTHETIC
+  SAP
+}
+
+Enum production_source_system {
+  SYNTHETIC
+  SAP
+}
+
+Enum integration_status {
+  RUNNING
+  SUCCESS
+  PARTIAL_SUCCESS
+  FAILED
+}
+
+Enum action_plan_priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+Enum action_plan_status {
+  OPEN
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  DELAYED
+}
+
+Enum report_type {
+  COMPANY_SUMMARY
+  PLANT_COMPARISON
+  SHIFT_COMPARISON
+  FOREMAN_PERFORMANCE
+  KPI_ANALYSIS
+  CRITICAL_PERFORMANCE
+  MISSING_DATA
+}
+
+Enum report_format {
+  CSV
+  XLSX
+  PDF
+}
+
+Enum report_status {
+  COMPLETED
+  FAILED
+}
+
+// ---------------- Organizasyon ve personel ----------------
+
+Table factories {
+  id uuid [pk]
+  code varchar(20) [unique, not null]
+  name varchar(200) [not null]
+  location varchar(100) [not null]
+  is_active boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table plants {
+  id uuid [pk]
+  code varchar(20) [unique, not null]
+  name varchar(200) [not null]
+  description varchar(1000)
+  is_active boolean [not null]
+  sap_plant_code varchar(20)
+  factory_id uuid [not null]
+  sequence_number integer [unique, not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table shifts {
+  id uuid [pk]
+  code varchar(20) [unique, not null]
+  name varchar(100) [not null]
+  start_time time [not null]
+  end_time time [not null]
+  sequence integer [not null]
+  crosses_midnight boolean [not null]
+  is_active boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table chiefs {
+  id uuid [pk]
+  employee_number varchar(30) [unique, not null]
+  first_name varchar(100) [not null]
+  last_name varchar(100) [not null]
+  plant_id uuid [not null]
+  hire_date date [not null]
+  is_active boolean [not null]
+  sap_personnel_number varchar(30)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (id, plant_id) [unique, name: 'uq_chiefs_id_plant_id']
+  }
+}
+
+Table foremen {
+  id uuid [pk]
+  employee_number varchar(30) [unique, not null]
+  first_name varchar(100) [not null]
+  last_name varchar(100) [not null]
+  hire_date date [not null]
+  termination_date date
+  is_active boolean [not null]
+  sap_personnel_number varchar(30)
+  photo_url varchar(500)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table foreman_assignments {
+  id uuid [pk]
+  foreman_id uuid [not null]
+  plant_id uuid [not null]
+  chief_id uuid [not null]
+  shift_id uuid [not null]
+  start_date date [not null]
+  end_date date
+  is_active boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table production_lines {
+  id uuid [pk]
+  code varchar(30) [unique, not null]
+  name varchar(200) [not null]
+  plant_id uuid [not null]
+  is_active boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table foreman_work_calendar {
+  id uuid [pk]
+  foreman_id uuid [not null]
+  work_date date [not null]
+  plant_id uuid [not null]
+  chief_id uuid [not null]
+  shift_id uuid [not null]
+  line_id uuid [not null]
+  is_working boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (foreman_id, work_date) [unique, name: 'uq_foreman_work_calendar_foreman_date']
+  }
+}
+
+Table company_calendar {
+  id uuid [pk]
+  calendar_date date [unique, not null]
+  is_holiday boolean [not null]
+  note varchar(200)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'FK yok - izole referans tablosu'
+}
+
+// ---------------- KPI tanimi ----------------
+
+Table kpis {
+  id uuid [pk]
+  code varchar(30) [unique, not null]
+  name varchar(200) [not null]
+  description varchar(1000)
+  unit varchar(30) [not null]
+  calculation_type calculation_type [not null]
+  success_direction_higher boolean [not null]
+  default_target_value numeric(12,4) [not null]
+  min_valid_value numeric(12,4) [not null]
+  max_valid_value numeric(12,4) [not null]
+  min_score numeric(12,2) [not null]
+  max_score numeric(12,2) [not null]
+  weight numeric(5,2) [not null]
+  valid_from date [not null]
+  valid_to date
+  is_active boolean [not null]
+  source_data_field varchar(100)
+  aggregation_method aggregation_method [not null]
+  decimal_places integer [not null]
+  is_critical boolean [not null]
+  display_order integer [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table kpi_calculation_rules {
+  id uuid [pk]
+  kpi_id uuid [not null]
+  version integer [not null]
+  calculation_type calc_rule_type [not null]
+  parameters json [not null]
+  valid_from date [not null]
+  valid_to date
+  is_active boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table kpi_targets {
+  id uuid [pk]
+  kpi_id uuid [not null]
+  scope_type target_scope_type [not null]
+  scope_id uuid [note: 'Polimorfik: fiziksel FK yok. scope_type degerine gore uygulama seviyesinde plants.id / chiefs.id / foremen.id ile eslestirilir; COMPANY icin NULL.']
+  target_value numeric(12,4) [not null]
+  valid_from date [not null]
+  valid_to date
+  is_active boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table performance_level_rules {
+  id uuid [pk]
+  name varchar(50) [unique, not null]
+  min_score numeric(6,2) [not null]
+  max_score numeric(6,2) [not null]
+  description varchar(500) [not null]
+  color varchar(20) [not null]
+  icon varchar(50) [not null]
+  sort_order integer [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'FK yok - izole referans tablosu'
+}
+
+// ---------------- Uretim ve performans ----------------
+
+Table products {
+  id uuid [pk]
+  code varchar(30) [unique, not null]
+  name varchar(200) [not null]
+  unit varchar(20) [not null]
+  standard_gram numeric(10,3)
+  lower_gram_limit numeric(10,3)
+  upper_gram_limit numeric(10,3)
+  is_active boolean [not null]
+  sap_material_code varchar(30)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table production_records {
+  id uuid [pk]
+  source_system production_source_system [not null]
+  source_record_id varchar(100) [not null]
+  production_order_number varchar(50) [not null]
+  batch_number varchar(50) [not null]
+  plant_id uuid [not null]
+  line_id uuid [not null]
+  product_id uuid [not null]
+  foreman_id uuid [not null]
+  chief_id uuid [not null]
+  shift_id uuid [not null]
+  production_date date [not null]
+  unit varchar(20) [not null]
+  planned_qty numeric(14,4)
+  actual_qty numeric(14,4)
+  planned_start_at timestamptz
+  planned_end_at timestamptz
+  actual_start_at timestamptz
+  actual_end_at timestamptz
+  standard_speed numeric(14,4)
+  actual_speed numeric(14,4)
+  measured_avg_gram numeric(10,3)
+  gram_sample_count integer
+  gsf_qty numeric(14,4)
+  iskarta_qty numeric(14,4)
+  planned_downtime_minutes numeric(10,2)
+  unplanned_downtime_minutes numeric(10,2)
+  plan_revision_no integer [not null]
+  plan_revision_at timestamptz
+  source_updated_at timestamptz
+  imported_at timestamptz [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (source_system, source_record_id) [unique, name: 'uq_production_record_source']
+    (foreman_id, production_date, shift_id) [unique, name: 'uq_production_record_natural_key']
+  }
+}
+
+Table performance_records {
+  id uuid [pk]
+  source_system source_system [not null]
+  source_record_id varchar(100) [not null]
+  integration_run_id uuid [not null]
+  performance_date date [not null]
+  plant_id uuid [not null]
+  chief_id uuid [not null]
+  shift_id uuid [not null]
+  foreman_id uuid [not null]
+  kpi_id uuid [not null]
+  target_value numeric(14,4)
+  actual_value numeric(14,4)
+  numerator_value numeric(14,4)
+  denominator_value numeric(14,4)
+  unit varchar(30) [not null]
+  data_quality_status data_quality_status [not null]
+  source_updated_at timestamptz
+  imported_at timestamptz [not null]
+  production_record_id uuid [note: 'nullable, ON DELETE SET NULL']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (source_system, source_record_id) [unique, name: 'uq_perf_record_source']
+    (foreman_id, kpi_id, chief_id, shift_id, performance_date) [unique, name: 'uq_perf_record_natural_key']
+  }
+}
+
+Table performance_scores {
+  id uuid [pk]
+  performance_record_id uuid [unique, not null]
+  calculation_rule_id uuid [not null]
+  raw_score numeric(14,3) [not null]
+  capped_score numeric(14,3) [not null]
+  kpi_weight numeric(5,2) [not null]
+  weighted_contribution numeric(14,3) [not null]
+  calculation_version integer [not null]
+  calculated_at timestamptz [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'performance_record_id UNIQUE -> performance_records ile 1:1 iliski'
+}
+
+// ---------------- Entegrasyon ve veri kalitesi ----------------
+
+Table integration_runs {
+  id uuid [pk]
+  source_system run_source_system [not null]
+  started_at timestamptz [not null]
+  finished_at timestamptz
+  status integration_status [not null]
+  processed_count integer [not null]
+  success_count integer [not null]
+  error_count integer [not null]
+  skipped_count integer [not null]
+  notes varchar(2000)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table data_quality_issues {
+  id uuid [pk]
+  performance_record_id uuid
+  issue_type issue_type [not null]
+  description varchar(1000) [not null]
+  detected_at timestamptz [not null]
+  status varchar(30) [not null, note: 'enum degil, duz metin']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+// ---------------- Kullanici ve diger sistem tablolari ----------------
+
+Table users {
+  id uuid [pk]
+  email varchar(255) [unique, not null]
+  password_hash varchar(200) [not null]
+  full_name varchar(200) [not null]
+  title varchar(200)
+  is_active boolean [not null]
+  failed_login_attempts integer [not null]
+  locked_until timestamptz
+  last_login_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table audit_logs {
+  id uuid [pk]
+  user_id uuid
+  action varchar(100) [not null]
+  entity varchar(100)
+  old_value varchar(2000)
+  new_value varchar(2000)
+  ip_address varchar(64)
+  session_info varchar(200)
+  success boolean [not null]
+  error_message varchar(1000)
+  created_at timestamptz [not null]
+}
+
+Table action_plans {
+  id uuid [pk]
+  title varchar(300) [not null]
+  description varchar(4000)
+  plant_id uuid
+  shift_id uuid
+  foreman_id uuid
+  kpi_id uuid
+  owner varchar(200) [not null]
+  created_by_user_id uuid [not null]
+  priority action_plan_priority [not null]
+  status action_plan_status [not null]
+  start_date date [not null]
+  target_end_date date [not null]
+  actual_end_date date
+  completion_percentage integer [not null]
+  outcome_notes varchar(4000)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  chief_id uuid
+}
+
+Table report_exports {
+  id uuid [pk]
+  report_type report_type [not null]
+  format report_format [not null]
+  filters_json json [not null]
+  requested_by_user_id uuid [not null]
+  file_name varchar(300) [not null]
+  file_content bytea [not null]
+  row_count integer [not null]
+  status report_status [not null]
+  completed_at timestamptz [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+// ---------------- Teknik (is modeli disi) ----------------
+
+Table alembic_version {
+  version_num varchar(32) [pk]
+
+  Note: 'Alembic migration bookkeeping tablosu - uygulama is modelinin disinda'
+}
+
+// ================= ILISKILER =================
+
+Ref: plants.factory_id > factories.id
+Ref: chiefs.plant_id > plants.id
+Ref: foreman_assignments.plant_id > plants.id
+Ref: foreman_assignments.(chief_id, plant_id) > chiefs.(id, plant_id)
+Ref: foreman_assignments.foreman_id > foremen.id
+Ref: foreman_assignments.shift_id > shifts.id
+Ref: production_lines.plant_id > plants.id
+Ref: foreman_work_calendar.foreman_id > foremen.id
+Ref: foreman_work_calendar.plant_id > plants.id
+Ref: foreman_work_calendar.chief_id > chiefs.id
+Ref: foreman_work_calendar.shift_id > shifts.id
+Ref: foreman_work_calendar.line_id > production_lines.id
+Ref: production_records.plant_id > plants.id
+Ref: production_records.line_id > production_lines.id
+Ref: production_records.product_id > products.id
+Ref: production_records.foreman_id > foremen.id
+Ref: production_records.chief_id > chiefs.id
+Ref: production_records.shift_id > shifts.id
+Ref: kpi_calculation_rules.kpi_id > kpis.id
+Ref: kpi_targets.kpi_id > kpis.id
+Ref: performance_records.kpi_id > kpis.id
+Ref: performance_records.plant_id > plants.id
+Ref: performance_records.chief_id > chiefs.id
+Ref: performance_records.shift_id > shifts.id
+Ref: performance_records.foreman_id > foremen.id
+Ref: performance_records.integration_run_id > integration_runs.id
+Ref: performance_records.production_record_id > production_records.id
+Ref: performance_scores.performance_record_id - performance_records.id
+Ref: performance_scores.calculation_rule_id > kpi_calculation_rules.id
+Ref: data_quality_issues.performance_record_id > performance_records.id
+Ref: action_plans.created_by_user_id > users.id
+Ref: action_plans.plant_id > plants.id
+Ref: action_plans.shift_id > shifts.id
+Ref: action_plans.foreman_id > foremen.id
+Ref: action_plans.kpi_id > kpis.id
+Ref: action_plans.chief_id > chiefs.id
+Ref: report_exports.requested_by_user_id > users.id
+Ref: audit_logs.user_id > users.id
+</pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet" id="sade">
+    <div class="sheet-head">
+      <div>
+        <div class="eyebrow">3 · Basitleştirilmiş Yönetici Şeması</div>
+        <h2>Ana akış + destekleyici tablolar</h2>
+      </div>
+    </div>
+    <div class="sheet-note">
+      Ana akış: <code>factories → plants → production_lines → production_records → performance_records → performance_scores</code>. Destekleyici: chiefs, foremen, shifts, products, kpis, kpi_targets, kpi_calculation_rules, integration_runs, data_quality_issues — hepsi ana akışa gerçek FK'leriyle bağlanır.
+    </div>
+    <div class="panel">
+      <div class="panel-bar">
+        <span>mermaid · erDiagram · sadeleştirilmiş</span>
+        <div class="zoom-controls">
+          <button class="zoom-btn" onclick="zoomCtl['diagram-simple'].out()" aria-label="Uzaklaştır">−</button>
+          <span class="zoom-level" id="zoom-level-diagram-simple">100%</span>
+          <button class="zoom-btn" onclick="zoomCtl['diagram-simple'].in()" aria-label="Yakınlaştır">+</button>
+          <button class="zoom-btn" style="width:auto;padding:0 0.5rem;" onclick="zoomCtl['diagram-simple'].reset()">Sığdır</button>
+          <button class="copy-btn" onclick="copyBlock('src-simple-mermaid', this)">Kopyala</button>
+        </div>
+      </div>
+      <div class="diagram-scroll" id="diagram-simple">
+        <pre class="mermaid" id="src-simple-mermaid">
+erDiagram
+    %% ================= ANA AKIS =================
+    factories { uuid id PK  varchar_20 code UK }
+    plants { uuid id PK  varchar_20 code UK }
+    production_lines { uuid id PK  varchar_30 code UK }
+    production_records { uuid id PK  date production_date }
+    performance_records { uuid id PK  date performance_date }
+    performance_scores { uuid id PK  numeric_14_3 capped_score }
+
+    %% ================= DESTEKLEYICI =================
+    chiefs { uuid id PK  varchar_30 employee_number UK }
+    foremen { uuid id PK  varchar_30 employee_number UK }
+    shifts { uuid id PK  varchar_20 code UK }
+    products { uuid id PK  varchar_30 code UK }
+    kpis { uuid id PK  varchar_30 code UK }
+    kpi_targets { uuid id PK  numeric_12_4 target_value }
+    kpi_calculation_rules { uuid id PK  enum_calc_rule_type calculation_type }
+    integration_runs { uuid id PK  enum_integration_status status }
+    data_quality_issues { uuid id PK  enum_issue_type issue_type }
+
+    %% ================= ANA AKIS ILISKILERI =================
+    factories        ||--o{ plants               : "factory_id"
+    plants           ||--o{ production_lines      : "plant_id"
+    production_lines ||--o{ production_records    : "line_id"
+    production_records o|--o{ performance_records : "production_record_id (nullable)"
+    performance_records ||--o| performance_scores  : "performance_record_id (1:1)"
+
+    %% ================= DESTEKLEYICI ILISKILER =================
+    chiefs   ||--o{ production_records : "chief_id"
+    foremen  ||--o{ production_records : "foreman_id"
+    shifts   ||--o{ production_records : "shift_id"
+    products ||--o{ production_records : "product_id"
+
+    kpis ||--o{ performance_records     : "kpi_id"
+    kpis ||--o{ kpi_targets             : "kpi_id"
+    kpis ||--o{ kpi_calculation_rules   : "kpi_id"
+    kpi_calculation_rules ||--o{ performance_scores : "calculation_rule_id"
+
+    integration_runs ||--o{ performance_records : "integration_run_id"
+    performance_records o|--o{ data_quality_issues : "performance_record_id (nullable)"
+        </pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Kaynak: çalışan PostgreSQL 16 örneğinin <code>information_schema</code>/<code>pg_catalog</code> introspection'ı. Sistemde bulunmayan hiçbir tablo, kolon veya ilişki eklenmemiştir — <code>kpi_targets.scope_id</code> fiziksel FK'si olmayan, uygulama seviyesinde çözümlenen polimorfik bir alandır ve şemada ilişki çizgisi olarak gösterilmemiştir.
+</footer>
+
+<script>
+  function copyBlock(id, btn) {
+    const el = document.getElementById(id);
+    const text = el.innerText;
+    const original = btn.textContent;
+
+    function showCopied() {
+      btn.textContent = 'Kopyalandı';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    }
+    function showFailed() {
+      btn.textContent = 'Seçip Ctrl+C yapın';
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+    // Artifact iframe'i Clipboard API'yi engelleyebiliyor (izin politikası) — bu durumda
+    // sessizce hiçbir şey olmuyormuş gibi görünüyordu. Eski execCommand yöntemine düşüyoruz.
+    function fallbackCopy() {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      const selection = document.getSelection();
+      const previousRange = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      document.body.removeChild(ta);
+      if (previousRange) { selection.removeAllRanges(); selection.addRange(previousRange); }
+      if (ok) showCopied(); else showFailed();
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(showCopied).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  }
+
+  // Mermaid SVG'si asenkron olarak render ediliyor; container içine düştüğü anı
+  // bir MutationObserver ile yakalayıp zoom kontrolünü ona bağlıyoruz.
+  const zoomCtl = {};
+
+  // transform: scale() kullanıyoruz (width/height değil) — bu, platformun mermaid SVG'sine
+  // uyguladığı herhangi bir stil ile asla çakışmaz. SVG'nin kendi kutusunu doğal boyutuna
+  // sabitleyip (viewBox'tan), sarmalayıcı <pre>'nin gerçek layout boyutunu zoom'a göre
+  // büyüterek kaydırma alanının da doğru genişlemesini sağlıyoruz.
+  function makeZoomController(containerId) {
+    const container = document.getElementById(containerId);
+    const levelLabel = document.getElementById('zoom-level-' + containerId);
+    let svg = null;
+    let wrap = null;
+    let naturalWidth = 0;
+    let naturalHeight = 0;
+    let zoom = 1;
+
+    function apply() {
+      if (!svg || !wrap || !naturalWidth) return;
+      svg.style.width = naturalWidth + 'px';
+      svg.style.height = naturalHeight + 'px';
+      svg.style.transform = 'scale(' + zoom + ')';
+      wrap.style.width = (naturalWidth * zoom) + 'px';
+      wrap.style.height = (naturalHeight * zoom) + 'px';
+      if (levelLabel) levelLabel.textContent = Math.round(zoom * 100) + '%';
+    }
+
+    function bind(el) {
+      svg = el;
+      wrap = svg.closest('pre.mermaid') || svg.parentElement;
+      const vb = svg.viewBox && svg.viewBox.baseVal;
+      const rect = svg.getBoundingClientRect();
+      naturalWidth = (vb && vb.width) || rect.width || 800;
+      naturalHeight = (vb && vb.height) || rect.height || 600;
+      zoom = 1;
+      apply();
+    }
+
+    const existing = container.querySelector('svg');
+    if (existing) {
+      bind(existing);
+    } else {
+      const observer = new MutationObserver(() => {
+        const found = container.querySelector('svg');
+        if (found) { observer.disconnect(); bind(found); }
+      });
+      observer.observe(container, { childList: true, subtree: true });
+    }
+
+    return {
+      in: () => { zoom = Math.min(zoom + 0.25, 4); apply(); },
+      out: () => { zoom = Math.max(zoom - 0.25, 0.25); apply(); },
+      reset: () => { zoom = 1; apply(); },
+    };
+  }
+
+  zoomCtl['diagram-full'] = makeZoomController('diagram-full');
+  zoomCtl['diagram-simple'] = makeZoomController('diagram-simple');
+</script>

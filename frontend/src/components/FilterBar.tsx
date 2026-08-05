@@ -13,7 +13,7 @@ const inputClass =
   "rounded-md border px-2.5 py-1.5 text-[13px] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30";
 const inputStyle = { borderColor: "var(--border-strong)", background: "var(--surface)", color: "var(--text-primary)" };
 
-interface Option {
+export interface MultiSelectOption {
   id: string;
   name: string;
   hint?: string;
@@ -21,7 +21,7 @@ interface Option {
 
 const SEARCH_THRESHOLD = 10;
 
-function MultiSelect({
+export function MultiSelect({
   label,
   options,
   selected,
@@ -29,7 +29,7 @@ function MultiSelect({
   disabled,
 }: {
   label: string;
-  options: Option[];
+  options: MultiSelectOption[];
   selected: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;

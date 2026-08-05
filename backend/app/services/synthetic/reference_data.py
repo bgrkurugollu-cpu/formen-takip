@@ -40,46 +40,66 @@ LAST_NAMES = [
     "Dinç", "Ergün", "Güler", "Koçak", "Öztaş", "Sezer", "Tanrıverdi", "Uçar", "Sevinç", "Zorlu",
 ]
 
+# Puan tavansız: hedef tam tutturulduğunda 100, daha iyi performansta 100'ün üzeri, daha kötüde
+# altı — manuel bir üst sınır uygulanmaz (spec rule 2.6/16). Bu sentinel yalnızca kpis.max_score
+# sütununun NOT NULL olması içindir; puanlama motoru CUSTOM_FORMULA türü için bu değeri hiç okumaz
+# (bkz. app/services/kpi_engine.py — capped_score = max(0, raw_score), tavan yok).
+_NO_CEILING_SENTINEL = 999999.99
+
 DEFAULT_KPI_SEED = [
     dict(
-        code="URETIM_GERCEKLESME", name="Üretim Hedef Gerçekleşme Oranı",
-        description="Gerçekleşen üretim miktarının hedef üretim miktarına oranı.",
-        unit="adet", calculation_type=CalculationType.HIGHER_IS_BETTER, success_direction_higher=True,
-        default_target_value=1000, min_valid_value=0, max_valid_value=5000,
-        min_score=0, max_score=120, weight=30, is_critical=True, display_order=1,
-        rule_params={},
+        code="AGIR_GITME", name="Ağır Gitme Oranı",
+        description="Üretilen ürünlerin kabul edilen gramaj aralığının (alt/üst limit) dışına çıkan işaretli sapmasının, standart üretim gramajına oranı.",
+        unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=False,
+        # İşaretli (over/under) değer taşıyabildiği için min_valid_value negatif — bkz. spec bölüm 3.1/4.
+        default_target_value=1.5, min_valid_value=-100, max_valid_value=100,
+        min_score=0, max_score=_NO_CEILING_SENTINEL, weight=20, is_critical=True, display_order=1,
+        rule_params={"formula_type": "SIGNED_ABSOLUTE_PIECEWISE", "good_coefficient": 9, "bad_coefficient": 12},
     ),
     dict(
-        code="FIRE_ORANI", name="Fire Oranı",
-        description="Üretilen miktara göre fireye ayrılan miktarın yüzdesi.",
-        unit="%", calculation_type=CalculationType.LOWER_IS_BETTER, success_direction_higher=False,
+        code="GSF", name="GSF Oranı",
+        description="Tekrar üretimde kullanılamayan, geri kazanılamayan ve çöp veya hayvan yemi olarak değerlendirilen nihai fire miktarının toplam brüt üretim miktarına oranı.",
+        unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=False,
         default_target_value=3.0, min_valid_value=0, max_valid_value=100,
-        min_score=0, max_score=120, weight=20, is_critical=True, display_order=2,
-        rule_params={},
+        min_score=0, max_score=_NO_CEILING_SENTINEL, weight=25, is_critical=True, display_order=2,
+        rule_params={
+            "formula_type": "HYBRID_BASE_PIECEWISE_LOG", "minimum_normalization_base": 0.05,
+            "good_coefficient": 10, "bad_coefficient": 16,
+        },
     ),
     dict(
-        code="PLANSIZ_DURUS", name="Plansız Duruş Süresi",
-        description="Vardiya içindeki toplam plansız duruş süresi.",
-        unit="dakika", calculation_type=CalculationType.PROPORTIONAL_PENALTY, success_direction_higher=False,
-        default_target_value=30, min_valid_value=0, max_valid_value=480,
-        min_score=0, max_score=120, weight=20, is_critical=True, display_order=3,
-        rule_params={"penalty_per_unit": 5, "unit_size": 5},
+        code="ISKARTA", name="Iskarta Oranı",
+        description="Şekil veya yapı bozukluğu nedeniyle paketlenemeyen ancak ürün hamurlarına katılarak yeniden üretimde kullanılabilen geri dönüştürülebilir ürün miktarının toplam brüt üretim miktarına oranı.",
+        unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=False,
+        default_target_value=2.0, min_valid_value=0, max_valid_value=100,
+        min_score=0, max_score=_NO_CEILING_SENTINEL, weight=15, is_critical=True, display_order=3,
+        rule_params={"formula_type": "TARGET_RATIO_PIECEWISE", "good_coefficient": 12, "bad_coefficient": 12},
     ),
     dict(
-        code="KALITE_UYGUNLUK", name="Kalite Uygunluk Oranı",
-        description="Kalite kontrolden uygun geçen üretimin yüzdesi.",
-        unit="%", calculation_type=CalculationType.RANGE_TARGET, success_direction_higher=True,
-        default_target_value=97, min_valid_value=0, max_valid_value=100,
-        min_score=0, max_score=120, weight=20, is_critical=True, display_order=4,
-        rule_params={"lower_bound": 95, "upper_bound": 100, "tolerance": 2, "penalty_rate": 4},
+        code="INKITA", name="İnkita Oranı",
+        description="Teknik ve imalat kaynaklı duruş sürelerinin planlanan üretim süresine oranı (Diğer duruşlar puana dahil edilmez).",
+        unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=False,
+        default_target_value=10.0, min_valid_value=0, max_valid_value=100,
+        min_score=0, max_score=_NO_CEILING_SENTINEL, weight=20, is_critical=True, display_order=4,
+        rule_params={
+            "formula_type": "HYBRID_BASE_PIECEWISE_LOG",
+            "included_components": ["TECHNICAL", "MANUFACTURING"], "excluded_components": ["OTHER"],
+            "minimum_normalization_base": 0.50, "good_coefficient": 6, "bad_coefficient": 10,
+        },
     ),
     dict(
-        code="IS_GUVENLIGI", name="İş Güvenliği ve Süreç Uyum Puanı",
-        description="Vardiya bazlı iş güvenliği ve süreç uyum denetim puanı.",
-        unit="puan", calculation_type=CalculationType.DIRECT_SCORE, success_direction_higher=True,
-        default_target_value=90, min_valid_value=0, max_valid_value=100,
-        min_score=0, max_score=100, weight=10, is_critical=True, display_order=5,
-        rule_params={},
+        code="PLANA_UYUM", name="Plana Uyum Oranı",
+        description="Gerçekleşen üretimin, güncel (revize) üretim planına göre mutlak sapması (plan altı ve plan üstü eşit ağırlıkta sapma sayılır).",
+        unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=True,
+        # Bu KPI'nın puanı planned/actual miktarlardan doğrudan hesaplanır (bkz. score_plan_compliance);
+        # default_target_value/kpi_targets yalnızca "bu KPI bu kapsamda yapılandırılmış mı" kontrolü
+        # için tutulur (spec rule 10/11), formüle girmez.
+        default_target_value=100.0, min_valid_value=0, max_valid_value=300,
+        min_score=0, max_score=_NO_CEILING_SENTINEL, weight=20, is_critical=True, display_order=5,
+        rule_params={
+            "formula_type": "PIECEWISE_LINEAR_LOGARITHMIC",
+            "normal_deviation_limit": 5.00, "excess_deviation_coefficient": 10.00,
+        },
     ),
 ]
 
@@ -324,6 +344,22 @@ def seed_reference_data(
                 db.add(assignment)
                 ref.assignments.append(assignment)
 
+    # Tesis bazlı hedefler: her tesisin kendi hedefi vardır (COMPANY hedefi yalnızca
+    # kaynaktan/tesisten hedef gelmediğinde devreye giren bir fallback'tir — bkz.
+    # app/services/target_resolver.py FOREMAN>CHIEF>PLANT>COMPANY önceliği).
+    for plant in ref.plants:
+        for kpi in ref.kpis:
+            base = float(kpi.default_target_value)
+            variation = rng.uniform(-0.15, 0.15)
+            plant_target = KpiTarget(
+                kpi_id=kpi.id, scope_type=TargetScopeType.PLANT, scope_id=plant.id,
+                target_value=max(0.01, base * (1 + variation)),
+                valid_from=date(2020, 1, 1), is_active=True,
+            )
+            db.add(plant_target)
+            ref.targets.append(plant_target)
+    db.flush()
+
     db.commit()
     return ref
 
@@ -367,7 +403,10 @@ def regenerate_personnel_identities(db: Session, rng: random.Random) -> tuple[in
 def _default_aggregation_for(calc_type: CalculationType):
     from app.models.enums import AggregationMethod
 
-    if calc_type in (CalculationType.HIGHER_IS_BETTER, CalculationType.LOWER_IS_BETTER, CalculationType.RANGE_TARGET):
+    if calc_type in (
+        CalculationType.HIGHER_IS_BETTER, CalculationType.LOWER_IS_BETTER, CalculationType.RANGE_TARGET,
+        CalculationType.CUSTOM_FORMULA,
+    ):
         return AggregationMethod.RATIO_RECOMPUTE
     if calc_type == CalculationType.PROPORTIONAL_PENALTY:
         return AggregationMethod.SUM

@@ -28,6 +28,25 @@ class Settings(BaseSettings):
     sap_client_id: str | None = None
     sap_client_secret: str | None = None
 
+    llm_enabled: bool = False
+    llm_api_key: str | None = None
+    llm_model: str = "gpt-4o-mini"
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_timeout_seconds: int = 30
+
+    llm_analysis_mode: str = "single_context"  # "single_context" | "tool_calling"
+    llm_tool_calling_enabled: bool = True
+    llm_demo_tool_calling_enabled: bool = True
+    llm_max_tool_calls: int = 10
+    llm_max_analysis_steps: int = 12
+    llm_tool_timeout_seconds: int = 10
+    llm_analysis_timeout_seconds: int = 60
+    llm_max_date_range_days: int = 365
+
+    @property
+    def llm_available(self) -> bool:
+        return self.llm_enabled and bool(self.llm_api_key)
+
 
 @lru_cache
 def get_settings() -> Settings:

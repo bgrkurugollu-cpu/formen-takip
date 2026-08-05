@@ -32,6 +32,12 @@ class PerformanceRecord(TimestampMixin, Base):
     shift_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shifts.id"), nullable=False, index=True)
     foreman_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("foremen.id"), nullable=False, index=True)
     kpi_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kpis.id"), nullable=False, index=True)
+    # Bu KPI sonucunun türetildiği ham üretim kaydı — izlenebilirlik için (hangi gerçek
+    # değer/ölçüm/parti bu sonuca yol açtı). Nullable: performans kaydı üretim kaydı
+    # olmadan da (ör. doğrudan SAP'ten KPI-seviyeli veri gelirse) var olabilir.
+    production_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("production_records.id", ondelete="SET NULL"), index=True
+    )
 
     target_value: Mapped[float | None] = mapped_column(Numeric(14, 4))
     actual_value: Mapped[float | None] = mapped_column(Numeric(14, 4))
@@ -59,10 +65,10 @@ class PerformanceScore(TimestampMixin, Base):
     )
     calculation_rule_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kpi_calculation_rules.id"), nullable=False)
 
-    raw_score: Mapped[float] = mapped_column(Numeric(8, 3), nullable=False)
-    capped_score: Mapped[float] = mapped_column(Numeric(8, 3), nullable=False)
+    raw_score: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False)
+    capped_score: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False)
     kpi_weight: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    weighted_contribution: Mapped[float] = mapped_column(Numeric(8, 3), nullable=False)
+    weighted_contribution: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False)
     calculation_version: Mapped[int] = mapped_column(Integer, nullable=False)
     calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

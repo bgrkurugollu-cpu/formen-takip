@@ -49,7 +49,7 @@ def _pick_existing_entities(db):
     chief = db.get(Chief, assignment.chief_id)
     shift = db.get(Shift, assignment.shift_id)
     foreman = db.get(Foreman, assignment.foreman_id)
-    kpi = db.scalar(select(Kpi).where(Kpi.code == "IS_GUVENLIGI"))
+    kpi = db.scalar(select(Kpi).where(Kpi.code == "PLANA_UYUM"))
     return plant, chief, shift, foreman, kpi
 
 

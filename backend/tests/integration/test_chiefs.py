@@ -1,8 +1,10 @@
 
+import pytest
 from sqlalchemy import select
 
 from app.models.foreman import Chief
 from app.models.organization import Factory, Plant
+from app.services.kpi_engine import weighted_geometric_score
 
 PERIOD = {"date_from": "2025-08-01", "date_to": "2026-07-28"}
 
@@ -58,7 +60,10 @@ class TestChiefDetail:
 
         assert client.get(f"/api/v1/chiefs/{uuid.uuid4()}", headers=auth_headers).status_code == 404
 
-    def test_score_equals_mean_of_team_scores(self, client, auth_headers, db_session):
+    def test_score_is_recomputed_from_chief_totals_not_averaged(self, client, auth_headers, db_session):
+        # Şef ekip puanı, formen puanlarının basit ortalaması DEĞİL; şefin sorumluluğundaki
+        # tüm kayıtların toplam pay/paydasından (KPI kırılımı üzerinden ağırlıklı geometrik
+        # ortalama ile) yeniden hesaplanır — bkz. app/services/analytics.py::chief_team_scores.
         listing = client.get(
             "/api/v1/chiefs",
             params={**PERIOD, "sort_by": "foreman_count", "sort_dir": "desc", "page_size": 5},
@@ -66,10 +71,11 @@ class TestChiefDetail:
         ).json()
 
         for row in listing["items"]:
-            team = client.get(f"/api/v1/chiefs/{row['id']}/foremen", params=PERIOD, headers=auth_headers).json()
-            scores = [f["total_score"] for f in team["items"]]
-            assert len(scores) == row["foreman_count"]
-            assert round(sum(scores) / len(scores), 1) == round(row["total_score"], 1)
+            breakdown = client.get(f"/api/v1/chiefs/{row['id']}/kpis", params=PERIOD, headers=auth_headers).json()
+            expected = weighted_geometric_score(
+                [(i["avg_capped_score"], i["weight"]) for i in breakdown["items"]]
+            )
+            assert row["total_score"] == pytest.approx(expected, rel=0.01)
 
     def test_detail_exposes_rankings(self, client, auth_headers, db_session):
         chief = db_session.scalars(select(Chief).order_by(Chief.employee_number)).first()

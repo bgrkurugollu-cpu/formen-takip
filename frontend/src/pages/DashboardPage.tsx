@@ -10,6 +10,7 @@ import { KpiBarChart } from "../components/charts/KpiBarChart";
 import { RankingBarChart } from "../components/charts/RankingBarChart";
 import { DistributionChart } from "../components/charts/DistributionChart";
 import { RelatedActionPlans } from "../components/RelatedActionPlans";
+import { ContributionSummaryStats } from "../components/ContributionSummaryStats";
 import {
   useDashboardSummary, useDashboardTrend, useKpiSummary, usePlantRanking,
   useShiftComparison, useForemanRanking, usePerformanceDistribution,
@@ -81,7 +82,20 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <Card title="Genel Performans Trendi">
-            {trend.isLoading ? <LoadingState /> : trend.data ? <TrendChart points={trend.data.points} /> : <ErrorState />}
+            {trend.isLoading ? (
+              <LoadingState />
+            ) : trend.data ? (
+              <TrendChart
+                points={trend.data.points}
+                yAxisFloor={
+                  foremanRankingBottom.data && foremanRankingBottom.data.items.length > 0
+                    ? Math.min(...foremanRankingBottom.data.items.map((f) => f.total_score)) - 20
+                    : undefined
+                }
+              />
+            ) : (
+              <ErrorState />
+            )}
           </Card>
         </div>
         <Card title="Performans Dağılımı">
@@ -152,6 +166,8 @@ export function DashboardPage() {
       </div>
 
       <RelatedActionPlans title="Açık Aksiyon Planları" />
+
+      <ContributionSummaryStats onViewAll={() => navigate("/improvement-works")} linkStatsTo="/improvement-works" />
     </div>
   );
 }

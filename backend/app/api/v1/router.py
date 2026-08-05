@@ -2,9 +2,11 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     action_plans,
+    anomalies,
     audit_logs,
     auth,
     chiefs,
+    contributions,
     dashboard,
     data_quality,
     foremen,
@@ -28,3 +30,6 @@ api_router.include_router(integration.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(action_plans.router)
 api_router.include_router(reports.router)
+api_router.include_router(contributions.router)
+api_router.include_router(anomalies.router)
+api_router.include_router(anomalies.analyses_router)

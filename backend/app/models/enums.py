@@ -90,3 +90,142 @@ class ReportFormat(str, enum.Enum):
 class ReportStatus(str, enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class ContributionWorkType(str, enum.Enum):
+    SMED = "smed"
+    KAIZEN = "kaizen"
+    PROBLEM_SOLVING = "problem_solving"
+    COST_REDUCTION = "cost_reduction"
+    TIME_SAVING = "time_saving"
+    QUALITY_IMPROVEMENT = "quality_improvement"
+    SAFETY_IMPROVEMENT = "safety_improvement"
+    ENERGY_RESOURCE_SAVING = "energy_resource_saving"
+    PRODUCTION_EFFICIENCY = "production_efficiency"
+    DIGITALIZATION = "digitalization"
+    OTHER = "other"
+
+
+class ContributionStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+
+class FinancialGainStatus(str, enum.Enum):
+    YES = "yes"
+    NO = "no"
+    NOT_CALCULATED = "not_calculated"
+
+
+class Currency(str, enum.Enum):
+    TRY = "TRY"
+    USD = "USD"
+    EUR = "EUR"
+
+
+class GainPeriod(str, enum.Enum):
+    ONE_TIME = "one_time"
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+
+
+class VerifyingDepartment(str, enum.Enum):
+    FINANCE = "finance"
+    PRODUCTION = "production"
+    MAINTENANCE = "maintenance"
+    QUALITY = "quality"
+    SAFETY = "safety"
+    ENERGY = "energy"
+    HR = "hr"
+    OTHER = "other"
+
+
+class TimeUnit(str, enum.Enum):
+    SECOND = "second"
+    MINUTE = "minute"
+    HOUR = "hour"
+
+
+class RepeatPeriod(str, enum.Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+
+
+class ImpactLevel(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class OtherGainType(str, enum.Enum):
+    CAPACITY_INCREASE = "capacity_increase"
+    DOWNTIME_REDUCTION = "downtime_reduction"
+    GSF_REDUCTION = "gsf_reduction"
+    SCRAP_REDUCTION = "scrap_reduction"
+    SLOW_RUNNING_REDUCTION = "slow_running_reduction"
+    SAFETY_RISK_REDUCTION = "safety_risk_reduction"
+    ENERGY_REDUCTION = "energy_reduction"
+    LABOR_SAVING = "labor_saving"
+    QUALITY_DEFECT_REDUCTION = "quality_defect_reduction"
+    OTHER = "other"
+
+
+class HighlightedGainMode(str, enum.Enum):
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+class ContributionRole(str, enum.Enum):
+    LEAD = "lead"
+    CONTRIBUTOR = "contributor"
+
+
+class AnomalyType(str, enum.Enum):
+    SHIFT_UNDERPERFORMANCE = "shift_underperformance"
+    RISING_TREND = "rising_trend"
+    FOREMAN_DEVIATION = "foreman_deviation"
+    PRODUCT_GROUP_DEVIATION = "product_group_deviation"
+    DOWNTIME_CONCENTRATION = "downtime_concentration"
+    PLAN_ADHERENCE_STREAK = "plan_adherence_streak"
+    PLANT_HISTORICAL_DEVIATION = "plant_historical_deviation"
+    CROSS_PLANT_GAP = "cross_plant_gap"
+    MULTI_KPI_SIMULTANEOUS = "multi_kpi_simultaneous"
+    SINGLE_DAY_SPIKE = "single_day_spike"
+    CHRONIC_ANOMALY = "chronic_anomaly"
+    CRITICAL_PRODUCTION_LOSS = "critical_production_loss"
+    DATA_QUALITY_SUSPECT = "data_quality_suspect"
+
+
+class AnomalySeverity(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class AnomalyStatus(str, enum.Enum):
+    NEW = "new"
+    IN_REVIEW = "in_review"
+    ACTION_PENDING = "action_pending"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class AnomalyAnalysisStatus(str, enum.Enum):
+    NOT_ANALYZED = "not_analyzed"
+    ANALYZING = "analyzing"  # yalnızca single_context modu; tool_calling daha ayrıntılı durumlar kullanır
+    QUEUED = "queued"
+    PLANNING = "planning"
+    COLLECTING_DATA = "collecting_data"
+    GENERATING_ANALYSIS = "generating_analysis"
+    COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+
+
+class AnalysisMode(str, enum.Enum):
+    SINGLE_CONTEXT = "single_context"
+    TOOL_CALLING = "tool_calling"

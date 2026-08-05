@@ -1,4 +1,3 @@
-import random
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -16,7 +15,6 @@ from app.schemas.common import PageParams, page_params
 from app.services.audit import record_audit
 from app.services.ingestion import run_ingestion
 from app.services.providers.synthetic_provider import SyntheticDataProvider
-from app.services.synthetic.generator import GenerationParams
 
 router = APIRouter(prefix="/integration", tags=["integration"])
 
@@ -89,7 +87,7 @@ def trigger_resync(
     if not plant_codes:
         plant_codes = list(db.scalars(select(Plant.code)))
 
-    provider = SyntheticDataProvider(db, random.Random(), GenerationParams())
+    provider = SyntheticDataProvider(db)
     run = run_ingestion(db, provider, payload.date_from, payload.date_to, plant_codes=plant_codes)
 
     record_audit(

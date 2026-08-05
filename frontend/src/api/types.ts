@@ -235,6 +235,7 @@ export interface ForemanKpiItem {
   kpi_id: string;
   code: string;
   name: string;
+  description: string | null;
   unit: string;
   avg_target: number | null;
   avg_actual: number | null;
@@ -243,6 +244,26 @@ export interface ForemanKpiItem {
   weight: number;
   weighted_contribution_sum: number;
   record_count: number;
+  calculation_version: number | null;
+  calculation_period: { date_from: string; date_to: string };
+  data_quality_status: string;
+  source_system: string;
+  agir_gitme?: {
+    signed_value: number;
+    absolute_value: number;
+    direction: "OVERWEIGHT" | "UNDERWEIGHT" | "ON_TARGET";
+    ratio_to_target: number | null;
+  };
+  inkita?: {
+    included_total: number | null;
+    included_components: string[];
+    excluded_components: string[];
+    note: string;
+  };
+  plana_uyum?: {
+    avg_attainment_pct: number;
+    direction: "OVER_PLAN" | "UNDER_PLAN" | "ON_PLAN";
+  };
 }
 
 export interface CalculationDetail {
@@ -411,4 +432,405 @@ export interface ReportExportMeta {
   status?: string;
   requested_by?: string | null;
   created_at: string;
+}
+
+export type ContributionWorkType =
+  | "smed" | "kaizen" | "problem_solving" | "cost_reduction" | "time_saving"
+  | "quality_improvement" | "safety_improvement" | "energy_resource_saving"
+  | "production_efficiency" | "digitalization" | "other";
+export type ContributionStatus = "draft" | "published";
+export type FinancialGainStatus = "yes" | "no" | "not_calculated";
+export type ContributionCurrency = "TRY" | "USD" | "EUR";
+export type GainPeriod = "one_time" | "monthly" | "yearly";
+export type VerifyingDepartment =
+  | "finance" | "production" | "maintenance" | "quality" | "safety" | "energy" | "hr" | "other";
+export type ContributionTimeUnit = "second" | "minute" | "hour";
+export type RepeatPeriod = "daily" | "weekly" | "monthly";
+export type ImpactLevel = "low" | "medium" | "high";
+export type OtherGainType =
+  | "capacity_increase" | "downtime_reduction" | "gsf_reduction" | "scrap_reduction"
+  | "slow_running_reduction" | "safety_risk_reduction" | "energy_reduction"
+  | "labor_saving" | "quality_defect_reduction" | "other";
+export type HighlightedGainMode = "auto" | "manual";
+
+export type ContributionRole = "lead" | "contributor";
+
+export interface ContributionForemanRef {
+  id: string;
+  name: string;
+  employee_number: string;
+  role: ContributionRole;
+}
+
+export interface ContributionPlantRef {
+  id: string;
+  name: string;
+  code: string;
+  factory_id: string;
+  factory_name: string;
+  factory_code: string;
+}
+
+export interface ContributionGain {
+  id: string;
+  gain_type: OtherGainType;
+  gain_type_label: string;
+  gain_type_other_note: string | null;
+  previous_value: number | null;
+  next_value: number | null;
+  change_amount: number | null;
+  change_percent: number | null;
+  is_improvement: boolean | null;
+  unit: string | null;
+  measurement_period: string | null;
+  description: string | null;
+}
+
+export interface ContributionGainInput {
+  gain_type: OtherGainType;
+  gain_type_other_note?: string;
+  previous_value?: number;
+  next_value?: number;
+  unit?: string;
+  measurement_period?: string;
+  description?: string;
+}
+
+export interface ContributionHighlightedGain {
+  source: string;
+  label: string;
+  value: number;
+  unit: string | null;
+  is_verified: boolean;
+}
+
+export interface ContributionBeforeAfter {
+  metric_label: string;
+  before: string;
+  after: string;
+  change: string;
+  is_improvement: boolean;
+}
+
+export interface ContributionWorkItem {
+  id: string;
+  title: string;
+  status: ContributionStatus;
+  work_type: ContributionWorkType | null;
+  work_type_label: string | null;
+  work_type_other_note: string | null;
+  summary: string | null;
+  detailed_description: string | null;
+  problem_description: string | null;
+  solution_description: string | null;
+  result_description: string | null;
+  foremen: ContributionForemanRef[];
+  plant: ContributionPlantRef | null;
+  work_date: string | null;
+  work_date_end: string | null;
+  impact_level: ImpactLevel | null;
+  created_by: string | null;
+  created_by_user_id: string;
+  published_at: string | null;
+  is_standardized: boolean;
+  is_applicable_other_plants: boolean;
+  is_permanent_solution: boolean;
+  work_instruction_updated: boolean;
+  financial_gain_status: FinancialGainStatus;
+  estimated_amount: number | null;
+  verified_amount: number | null;
+  currency: ContributionCurrency | null;
+  gain_period: GainPeriod | null;
+  calculation_method: string | null;
+  is_gain_verified: boolean;
+  verified_by_department: VerifyingDepartment | null;
+  verified_by_department_other_note: string | null;
+  verification_date: string | null;
+  verification_note: string | null;
+  previous_duration: number | null;
+  new_duration: number | null;
+  duration_unit: ContributionTimeUnit | null;
+  per_occurrence_saving: number | null;
+  repeat_period: RepeatPeriod | null;
+  repeat_count: number | null;
+  monthly_total_saving_minutes: number | null;
+  gains: ContributionGain[];
+  highlighted_gain_mode: HighlightedGainMode;
+  highlighted_gain_ref: string | null;
+  highlighted_gain: ContributionHighlightedGain | null;
+  before_after: ContributionBeforeAfter | null;
+  badges: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContributionWorkCreatePayload {
+  title: string;
+  status?: ContributionStatus;
+  work_type?: ContributionWorkType;
+  work_type_other_note?: string;
+  summary?: string;
+  detailed_description?: string;
+  problem_description?: string;
+  solution_description?: string;
+  result_description?: string;
+  foreman_ids?: string[];
+  plant_id?: string;
+  work_date?: string;
+  work_date_end?: string;
+  impact_level?: ImpactLevel;
+  is_standardized?: boolean;
+  is_applicable_other_plants?: boolean;
+  is_permanent_solution?: boolean;
+  work_instruction_updated?: boolean;
+  financial_gain_status?: FinancialGainStatus;
+  estimated_amount?: number;
+  verified_amount?: number;
+  currency?: ContributionCurrency;
+  gain_period?: GainPeriod;
+  calculation_method?: string;
+  is_gain_verified?: boolean;
+  verified_by_department?: VerifyingDepartment;
+  verified_by_department_other_note?: string;
+  verification_date?: string;
+  verification_note?: string;
+  previous_duration?: number;
+  new_duration?: number;
+  duration_unit?: ContributionTimeUnit;
+  repeat_period?: RepeatPeriod;
+  repeat_count?: number;
+  per_occurrence_saving?: number;
+  monthly_total_saving_minutes?: number;
+  gains?: ContributionGainInput[];
+  highlighted_gain_mode?: HighlightedGainMode;
+  highlighted_gain_ref?: string;
+}
+
+export type ContributionWorkUpdatePayload = Partial<ContributionWorkCreatePayload>;
+
+export interface ForemanContributionSummary {
+  total_contributions: number;
+  smed_count: number;
+  led_contributions: number;
+  verified_financial_gain: Record<string, number>;
+  estimated_financial_gain: Record<string, number>;
+  total_time_saving_minutes: number;
+  last_contribution_date: string | null;
+}
+
+export interface ContributionSummary {
+  total_works: number;
+  added_this_month: number;
+  total_estimated_gain: number;
+  total_verified_gain: number;
+  total_monthly_time_saving_minutes: number;
+  by_plant: { name: string; count: number }[];
+  by_work_type: { label: string; count: number }[];
+  top_foremen: { id: string; name: string; count: number }[];
+  applicable_other_plants_count: number;
+  standardized_ratio: number;
+}
+
+// --- Tespitler (Anomalies) ---
+
+export type AnomalySeverity = "low" | "medium" | "high" | "critical";
+export type AnomalyStatus = "new" | "in_review" | "action_pending" | "resolved" | "closed";
+export type AnomalyAnalysisStatus =
+  | "not_analyzed" | "analyzing" | "queued" | "planning" | "collecting_data" | "generating_analysis"
+  | "completed" | "completed_with_warnings" | "failed" | "timed_out" | "cancelled";
+export type AnalysisMode = "single_context" | "tool_calling";
+
+export interface AnomalyListItem {
+  id: string;
+  code: string;
+  title: string;
+  factory_code: string | null;
+  factory_name: string | null;
+  plant_id: string;
+  plant_name: string | null;
+  shift_id: string | null;
+  shift_name: string | null;
+  kpi_id: string;
+  kpi_code: string | null;
+  kpi_name: string | null;
+  anomaly_type: string;
+  anomaly_type_label: string;
+  detected_at: string;
+  period_start: string;
+  period_end: string;
+  deviation_percent: number;
+  ml_confidence: number;
+  severity: AnomalySeverity;
+  severity_label: string;
+  status: AnomalyStatus;
+  status_label: string;
+  analysis_status: AnomalyAnalysisStatus;
+  analysis_status_label: string;
+}
+
+export interface AnomalyEvidenceItem {
+  type: string;
+  label: string;
+  value: number;
+  unit: string;
+}
+
+export interface AnomalyRelatedSignal {
+  kpi: string;
+  kpi_code: string;
+  value: number;
+  change_percent: number;
+  direction: "increase" | "decrease";
+}
+
+export interface AnomalyDailyPoint {
+  date: string;
+  value: number;
+}
+
+export interface AnomalyKpiDefinition {
+  name: string | null;
+  description: string | null;
+  desired_direction: "high" | "low" | null;
+  warning_threshold: number | null;
+  critical_threshold: number | null;
+}
+
+export type AnalysisConfidence = "low" | "medium" | "high";
+export type AnalysisPriority = "low" | "medium" | "high" | "critical";
+export type AnalysisRiskLevel = "low" | "medium" | "high" | "critical";
+
+export interface AnalysisSourceRef {
+  tool_call_id: string;
+  tool_name: string;
+}
+
+export interface AnalysisVerifiedFinding {
+  finding_id?: string;
+  finding: string;
+  evidence: string;
+  source_refs: AnalysisSourceRef[];
+}
+
+export interface AnalysisPossibleCause {
+  cause: string;
+  confidence: AnalysisConfidence;
+  supporting_evidence: string[];
+  contradicting_evidence: string[];
+  source_refs: AnalysisSourceRef[];
+  verification_required: string;
+}
+
+export interface AnalysisRecommendedInvestigation {
+  step: string;
+  responsible_unit: string;
+  priority: AnalysisPriority;
+  expected_output: string;
+}
+
+export interface AnalysisImmediateAction {
+  action: string;
+  responsible_unit: string;
+  priority: AnalysisPriority;
+  timeframe: string;
+  expected_impact: string;
+  requires_approval: boolean;
+}
+
+export interface AnalysisMediumTermAction {
+  action: string;
+  responsible_unit: string;
+  expected_impact: string;
+}
+
+export interface AnalysisToolUsedRef {
+  tool_name: string;
+  tool_call_id: string;
+  purpose: string;
+}
+
+export interface AnalysisDataScope {
+  start_date: string;
+  end_date: string;
+  record_count: number;
+  data_quality_status: string;
+}
+
+export interface AnalysisResult {
+  executive_summary: string;
+  verified_findings: AnalysisVerifiedFinding[];
+  possible_causes: AnalysisPossibleCause[];
+  recommended_investigations: AnalysisRecommendedInvestigation[];
+  immediate_actions: AnalysisImmediateAction[];
+  medium_term_actions: AnalysisMediumTermAction[];
+  missing_information: string[];
+  risk_level: AnalysisRiskLevel;
+  analysis_confidence: number;
+  requires_human_review: boolean;
+  tools_used: AnalysisToolUsedRef[];
+  data_scope: AnalysisDataScope | null;
+  analysis_limitations: string[];
+  disclaimer: string;
+}
+
+export interface AnomalyAnalysisRecord {
+  id: string;
+  code: string;
+  mode: AnalysisMode;
+  status: AnomalyAnalysisStatus;
+  status_label: string;
+  is_demo: boolean;
+  model: string;
+  result: AnalysisResult | null;
+  investigation_plan: string[] | null;
+  tool_call_count: number;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface AnomalyToolCallItem {
+  id: string;
+  code: string;
+  step_number: number;
+  tool_name: string;
+  tool_label: string;
+  arguments: Record<string, unknown>;
+  status: "success" | "error" | "timeout";
+  result: Record<string, unknown> | null;
+  record_count: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+}
+
+export interface AnomalyDetail extends AnomalyListItem {
+  description: string;
+  observed_value: number;
+  expected_value: number;
+  unit: string;
+  affected_days: number | null;
+  total_days: number | null;
+  comparison: Record<string, number>;
+  related_signals: AnomalyRelatedSignal[];
+  evidence: AnomalyEvidenceItem[];
+  foreman_codes: string[];
+  data_quality_status: string;
+  data_quality_warnings: string[];
+  daily_history: AnomalyDailyPoint[];
+  kpi_definition: AnomalyKpiDefinition;
+  latest_analysis: AnomalyAnalysisRecord | null;
+  analysis_history: AnomalyAnalysisRecord[];
+}
+
+export interface AnomalySummary {
+  total_active: number;
+  critical_count: number;
+  high_count: number;
+  pending_analysis_count: number;
+  opened_last_7_days: number;
+  resolved_count: number;
 }

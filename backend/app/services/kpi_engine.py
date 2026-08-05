@@ -1,12 +1,18 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from app.models.enums import CalculationType
 
 WEIGHT_SUM_TOLERANCE = 0.01
 DEFAULT_BASE_SCORE = 100.0
+
+# Genel puan için: kapsanan ağırlık bu oranın altındaysa genel puan üretilmez (spec bölüm 10 —
+# "eksik KPI sayısı izin verilen sınırı aşarsa genel puan üretme"). Spec bir sayı vermediği için
+# burada tek bir yerde tutulan, ayarlanabilir bir varsayılan.
+MIN_COVERED_WEIGHT_RATIO = 0.5
 
 
 class KpiCalculationError(ValueError):
@@ -76,6 +82,160 @@ def proportional_penalty(
     penalty = (overage / unit_size) * penalty_per_unit
     raw = base_score - penalty
     return _clip(raw, min_score, max_score)
+
+
+
+# ---------------------------------------------------------------------------------------------
+# KPI'a özel puanlama formülleri (spec bölüm 4-8). Her formül yalnızca kendi katsayılarını alır —
+# kpi_calculation_rules.parameters içindeki formula_type + katsayılar, calculate_custom_score
+# üzerinden buraya yönlendirilir. Nihai puan yalnızca 0'da taban görür (rule 6/7) — manuel bir üst
+# sınır uygulanmaz.
+# ---------------------------------------------------------------------------------------------
+
+
+def _heavy_weight_from_ratio(ratio: float, good_coefficient: float, bad_coefficient: float) -> float:
+    if ratio <= 1:
+        return 100.0 + good_coefficient * (1.0 - ratio)
+    return 100.0 - bad_coefficient * math.log2(ratio)
+
+
+def score_heavy_weight(actual: float, target: float, good_coefficient: float = 9.0, bad_coefficient: float = 12.0) -> ScoreResult:
+    """Ağır Gitme (bölüm 4). `actual` işaretlidir (OVERWEIGHT pozitif, UNDERWEIGHT negatif);
+    puanlamada mutlak büyüklüğü kullanılır."""
+    if target is None or target <= 0:
+        raise KpiCalculationError("Ağır Gitme hedefi sıfır, negatif veya eksik olamaz.")
+    raw = _heavy_weight_from_ratio(abs(actual) / target, good_coefficient, bad_coefficient)
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+def score_heavy_weight_from_period_ratio(period_ratio: float, good_coefficient: float = 9.0, bad_coefficient: float = 12.0) -> ScoreResult:
+    """Dönemsel Ağır Gitme (bölüm 11.4): üretim ağırlıklı oran zaten hesaplanmış olarak gelir."""
+    raw = _heavy_weight_from_ratio(max(0.0, period_ratio), good_coefficient, bad_coefficient)
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+def _hybrid_base_piecewise_log(
+    actual: float, target: float, minimum_normalization_base: float, good_coefficient: float, bad_coefficient: float
+) -> float:
+    if actual < 0 or target < 0:
+        raise KpiCalculationError("Değerler negatif olamaz.")
+    base = max(target, minimum_normalization_base)
+    if actual <= target:
+        return 100.0 + good_coefficient * ((target - actual) / base)
+    return 100.0 - bad_coefficient * math.log2(1.0 + ((actual - target) / base))
+
+
+def score_gsf(actual: float, target: float, minimum_normalization_base: float = 0.05, good_coefficient: float = 10.0, bad_coefficient: float = 16.0) -> ScoreResult:
+    """GSF (bölüm 5): geri kazanılamayan nihai kayıp — Iskarta'dan daha sert puanlanır."""
+    raw = _hybrid_base_piecewise_log(actual, target, minimum_normalization_base, good_coefficient, bad_coefficient)
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+def score_inkita(actual: float, target: float, minimum_normalization_base: float = 0.50, good_coefficient: float = 6.0, bad_coefficient: float = 10.0) -> ScoreResult:
+    """İnkita (bölüm 7): `actual` yalnızca Teknik% + İmalat% toplamı olmalı — Diğer% dahil edilmez."""
+    raw = _hybrid_base_piecewise_log(actual, target, minimum_normalization_base, good_coefficient, bad_coefficient)
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+def score_iskarta(actual: float, target: float, good_coefficient: float = 12.0, bad_coefficient: float = 12.0) -> ScoreResult:
+    """Iskarta (bölüm 6): geri dönüştürülebilir kayıp — GSF'ye göre daha yumuşak puanlanır."""
+    if target is None or target <= 0:
+        raise KpiCalculationError("Iskarta hedefi sıfır, negatif veya eksik olamaz.")
+    ratio = actual / target
+    if actual <= target:
+        raw = 100.0 + good_coefficient * (1.0 - ratio)
+    else:
+        raw = 100.0 - bad_coefficient * math.log2(ratio)
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+def _plan_compliance_from_deviation(deviation_rate: float, normal_deviation_limit: float, excess_deviation_coefficient: float) -> float:
+    if deviation_rate <= normal_deviation_limit:
+        return 100.0 - deviation_rate
+    # (100 - limit) ile başlar, böylece limit noktasında iki dal aynı değeri üretir (spec bölüm 8:
+    # örnekte limit=5 -> 95'ten başlar). Sabit "95" yerine limitten türetilir ki limit değişirse
+    # sıçrama oluşmasın.
+    base_at_limit = 100.0 - normal_deviation_limit
+    return base_at_limit - excess_deviation_coefficient * math.log2(deviation_rate / normal_deviation_limit)
+
+
+def score_plan_compliance(planned: float, actual: float, normal_deviation_limit: float = 5.0, excess_deviation_coefficient: float = 10.0) -> ScoreResult:
+    """Plana Uyum (bölüm 8): plan altı ve plan üstü sapmalar aynı formülle, mutlak sapma üzerinden."""
+    if planned is None or planned <= 0:
+        raise KpiCalculationError("Planlanan üretim sıfır, negatif veya eksik olamaz.")
+    deviation_rate = abs(actual - planned) / planned * 100.0
+    raw = _plan_compliance_from_deviation(deviation_rate, normal_deviation_limit, excess_deviation_coefficient)
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+def score_plan_compliance_from_period_deviation(deviation_rate: float, normal_deviation_limit: float = 5.0, excess_deviation_coefficient: float = 10.0) -> ScoreResult:
+    """Dönemsel Plana Uyum (bölüm 11.5): sapma oranı zaten mutlak farkların toplamından hesaplanmış olarak gelir."""
+    raw = _plan_compliance_from_deviation(max(0.0, deviation_rate), normal_deviation_limit, excess_deviation_coefficient)
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+def _dispatch_hybrid_base_piecewise_log(actual: float, target: float, params: dict) -> ScoreResult:
+    raw = _hybrid_base_piecewise_log(
+        actual, target,
+        params.get("minimum_normalization_base", 0.05),
+        params.get("good_coefficient", 10.0),
+        params.get("bad_coefficient", 16.0),
+    )
+    return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
+
+
+_CUSTOM_FORMULA_DISPATCH = {
+    "SIGNED_ABSOLUTE_PIECEWISE": lambda actual, target, p: score_heavy_weight(
+        actual, target, p.get("good_coefficient", 9.0), p.get("bad_coefficient", 12.0)
+    ),
+    "TARGET_RATIO_PIECEWISE": lambda actual, target, p: score_iskarta(
+        actual, target, p.get("good_coefficient", 12.0), p.get("bad_coefficient", 12.0)
+    ),
+    "HYBRID_BASE_PIECEWISE_LOG": _dispatch_hybrid_base_piecewise_log,
+}
+
+
+def calculate_custom_score(actual: float, target: float, formula_type: str, params: dict) -> ScoreResult:
+    """AGIR_GITME/GSF/ISKARTA/INKITA için ortak giriş noktası — hepsi (actual, target) çifti alır.
+    PLANA_UYUM bunun dışındadır (planned/actual gerektirir) — bkz. `compute_score_for_rule`."""
+    handler = _CUSTOM_FORMULA_DISPATCH.get(formula_type)
+    if handler is None:
+        raise KpiCalculationError(f"Bilinmeyen formula_type: '{formula_type}'.")
+    return handler(actual, target, params)
+
+
+def compute_score_for_rule(
+    calculation_type: CalculationType,
+    parameters: dict,
+    *,
+    actual: float,
+    target: float,
+    numerator: float | None = None,
+    denominator: float | None = None,
+    min_score: float = 0.0,
+    max_score: float = 999999.99,
+) -> ScoreResult:
+    """Bir performans kaydı için aktif kuralın türü ne olursa olsun tek giriş noktası — ingestion.py
+    ve rescoring.py aynı bu fonksiyonu çağırır (spec rule 17: sentetik ve SAP aynı servisleri kullanır).
+    CUSTOM_FORMULA dışındaki türler mevcut generic motora (calculate_score) düşer; CUSTOM_FORMULA ise
+    formula_type'a göre yeni KPI'a özel formüllere yönlendirilir. Plana Uyum, target yerine
+    numerator/denominator'ı (fiili/planlanan miktar) kullanır."""
+    if calculation_type != CalculationType.CUSTOM_FORMULA:
+        rule_params = CalculationRuleParams(
+            calculation_type=calculation_type, min_score=min_score, max_score=max_score, **parameters
+        )
+        return calculate_score(actual, target, rule_params)
+
+    formula_type = parameters.get("formula_type")
+    if formula_type == "PIECEWISE_LINEAR_LOGARITHMIC":
+        if numerator is None or denominator is None:
+            raise KpiCalculationError("Plana Uyum için fiili/planlanan miktar (numerator/denominator) gerekli.")
+        return score_plan_compliance(
+            planned=denominator, actual=numerator,
+            normal_deviation_limit=parameters.get("normal_deviation_limit", 5.0),
+            excess_deviation_coefficient=parameters.get("excess_deviation_coefficient", 10.0),
+        )
+    return calculate_custom_score(actual, target, formula_type, parameters)
 
 
 @dataclass
@@ -238,3 +398,38 @@ def aggregate_ratio_kpi(numerator_sum: float, denominator_sum: float) -> float:
     if denominator_sum == 0:
         return 0.0
     return (numerator_sum / denominator_sum) * 100
+
+
+def period_ratio_score(
+    actual_sum: float,
+    expected_sum: float,
+    success_direction_higher: bool,
+    epsilon: float = 1e-9,
+    max_score: float | None = None,
+) -> float:
+    """Dönem bazlı puan: önce pay/payda toplanır, tek bir orandan tek bir puan üretilir
+    (günlük puanların ortalaması alınmaz). Bant/eşik uygulanmaz. `max_score`, yalnızca
+    gerçekleşen toplamın (neredeyse) sıfır olduğu tekil durumda (ör. dönem boyunca hiç
+    fire oluşmaması) bölme sonucunun taşmasını önleyen bir sayısal güvenlik sınırıdır —
+    normal aralıktaki puanlar bu değere hiçbir zaman yaklaşmaz, bu yüzden bir performans
+    bandı/tavanı anlamına gelmez."""
+    if success_direction_higher:
+        raw = 100.0 * actual_sum / max(expected_sum, epsilon)
+    else:
+        raw = 100.0 * expected_sum / max(actual_sum, epsilon)
+    if max_score is not None:
+        return min(raw, max_score)
+    return raw
+
+
+def weighted_geometric_score(component_scores: list[tuple[float, float]]) -> float:
+    """Ağırlıklı geometrik ortalama: tek bir KPI'daki aşırı yüksek puanın diğer kötü
+    sonuçları gizlemesini engeller. Yalnızca verisi bulunan bileşenler geçirilmelidir —
+    ağırlıklar kendi aralarında otomatik yeniden normalize edilir (eksik KPI durumunda)."""
+    weight_sum = sum(w for _, w in component_scores)
+    if weight_sum <= 0:
+        return 0.0
+    product = 1.0
+    for score, weight in component_scores:
+        product *= (max(score, 0.0) / 100.0) ** (weight / weight_sum)
+    return 100.0 * product

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutGrid, Factory, Users, HardHat, Target, ClipboardList, FileText,
-  FlaskConical, RefreshCw, ShieldCheck, LogOut, Moon, Sun,
+  FlaskConical, RefreshCw, ShieldCheck, LogOut, Moon, Sun, Sparkles, SearchCheck,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -14,6 +14,8 @@ const NAV_ITEMS = [
   { to: "/foremen", label: "Formenler", icon: HardHat },
   { to: "/kpis", label: "KPI Analizi", icon: Target },
   { to: "/action-plans", label: "Aksiyon Planları", icon: ClipboardList },
+  { to: "/improvement-works", label: "Katkı ve İyileştirme Çalışmaları", icon: Sparkles },
+  { to: "/anomalies", label: "Tespitler", icon: SearchCheck },
   { to: "/reports", label: "Raporlar", icon: FileText },
   { to: "/data-quality", label: "Veri Kalitesi", icon: FlaskConical },
   { to: "/integration-status", label: "Entegrasyon Durumu", icon: RefreshCw },

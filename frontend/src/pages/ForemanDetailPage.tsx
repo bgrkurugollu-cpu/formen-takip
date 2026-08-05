@@ -7,6 +7,7 @@ import { PerformanceLevelBadge } from "../components/PerformanceLevelBadge";
 import { TrendChart } from "../components/charts/TrendChart";
 import { KpiRadarChart } from "../components/charts/KpiRadarChart";
 import { RelatedActionPlans } from "../components/RelatedActionPlans";
+import { ForemanContributionSummary } from "../components/ForemanContributionSummary";
 import {
   useForemanAssignmentHistory, useForemanCalculationDetail, useForemanDetail,
   useForemanKpis, useForemanTrend,
@@ -137,6 +138,7 @@ export function ForemanDetailPage() {
               <button
                 key={k.kpi_id}
                 onClick={() => setSelectedKpi(k)}
+                title={k.description ?? undefined}
                 className="rounded-md p-3 text-left transition-colors hover:border-[var(--accent)]"
                 style={{ border: "1px solid var(--border)" }}
               >
@@ -146,11 +148,26 @@ export function ForemanDetailPage() {
                   Hedef: {k.avg_target?.toFixed(1)} {k.unit} · Gerç.: {k.avg_actual?.toFixed(1)} {k.unit}
                 </p>
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>Ağırlık: %{k.weight}</p>
+                {k.agir_gitme && (
+                  <p className="mt-1 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                    {k.agir_gitme.direction === "OVERWEIGHT" ? "Üst gramaj yönünde" : k.agir_gitme.direction === "UNDERWEIGHT" ? "Alt gramaj yönünde" : "Hedefte"} sapma
+                  </p>
+                )}
+                {k.inkita && (
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>Diğer duruş puana dahil değil</p>
+                )}
+                {k.plana_uyum && (
+                  <p className="mt-1 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                    {k.plana_uyum.direction === "OVER_PLAN" ? "Plan üstü" : k.plana_uyum.direction === "UNDER_PLAN" ? "Plan altı" : "Plana uygun"} üretim
+                  </p>
+                )}
               </button>
             ))}
           </div>
         )}
       </Card>
+
+      {foremanId && <ForemanContributionSummary foremanId={foremanId} />}
 
       <Card title="Tesis / Şef / Vardiya Atama Geçmişi">
         {history.isLoading && <LoadingState />}

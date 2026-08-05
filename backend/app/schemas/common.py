@@ -16,7 +16,7 @@ class Filters:
     kpi_ids: list[UUID] | None = None
 
 
-def _parse_uuid_list(value: str | None) -> list[UUID] | None:
+def parse_uuid_list(value: str | None) -> list[UUID] | None:
     if not value:
         return None
     return [UUID(v) for v in value.split(",") if v.strip()]
@@ -38,11 +38,11 @@ def common_filters(
     return Filters(
         date_from=resolved_from,
         date_to=resolved_to,
-        plant_ids=_parse_uuid_list(plant_ids),
-        factory_ids=_parse_uuid_list(factory_ids),
-        chief_ids=_parse_uuid_list(chief_ids),
-        shift_ids=_parse_uuid_list(shift_ids),
-        kpi_ids=_parse_uuid_list(kpi_ids),
+        plant_ids=parse_uuid_list(plant_ids),
+        factory_ids=parse_uuid_list(factory_ids),
+        chief_ids=parse_uuid_list(chief_ids),
+        shift_ids=parse_uuid_list(shift_ids),
+        kpi_ids=parse_uuid_list(kpi_ids),
     )
 
 

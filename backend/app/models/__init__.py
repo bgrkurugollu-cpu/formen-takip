@@ -1,22 +1,47 @@
 from app.models.action_plan import ActionPlan
+from app.models.anomaly import Anomaly, AnomalyAnalysis, AnomalyToolCall
+from app.models.contribution import ContributionGain, ContributionWork, ContributionWorkForeman
 from app.models.enums import (
     ActionPlanPriority,
     ActionPlanStatus,
     AggregationMethod,
+    AnalysisMode,
+    AnomalyAnalysisStatus,
+    AnomalySeverity,
+    AnomalyStatus,
+    AnomalyType,
     CalculationType,
+    ContributionStatus,
+    ContributionWorkType,
+    Currency,
     DataQualityStatus,
+    FinancialGainStatus,
+    GainPeriod,
+    HighlightedGainMode,
+    ImpactLevel,
     IntegrationStatus,
+    OtherGainType,
+    RepeatPeriod,
     ReportFormat,
     ReportStatus,
     ReportType,
     SourceSystem,
     TargetScopeType,
+    TimeUnit,
+    VerifyingDepartment,
 )
 from app.models.foreman import Chief, Foreman, ForemanAssignment
 from app.models.integration import DataQualityIssue, IntegrationRun
 from app.models.kpi import Kpi, KpiCalculationRule, KpiTarget, PerformanceLevelRule
 from app.models.organization import Factory, Plant, Shift
 from app.models.performance import PerformanceRecord, PerformanceScore
+from app.models.production import (
+    CompanyCalendarDay,
+    ForemanWorkCalendar,
+    Product,
+    ProductionLine,
+    ProductionRecord,
+)
 from app.models.report import ReportExport
 from app.models.user import AuditLog, User
 
@@ -47,7 +72,34 @@ __all__ = [
     "Shift",
     "PerformanceRecord",
     "PerformanceScore",
+    "Product",
+    "ProductionLine",
+    "CompanyCalendarDay",
+    "ForemanWorkCalendar",
+    "ProductionRecord",
     "ReportExport",
     "AuditLog",
     "User",
+    "ContributionWork",
+    "ContributionWorkForeman",
+    "ContributionGain",
+    "ContributionStatus",
+    "ContributionWorkType",
+    "Currency",
+    "FinancialGainStatus",
+    "GainPeriod",
+    "HighlightedGainMode",
+    "ImpactLevel",
+    "OtherGainType",
+    "RepeatPeriod",
+    "TimeUnit",
+    "VerifyingDepartment",
+    "Anomaly",
+    "AnomalyAnalysis",
+    "AnomalyToolCall",
+    "AnalysisMode",
+    "AnomalyAnalysisStatus",
+    "AnomalySeverity",
+    "AnomalyStatus",
+    "AnomalyType",
 ]

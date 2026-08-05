@@ -14,7 +14,7 @@ from app.models.integration import DataQualityIssue, IntegrationRun
 from app.models.kpi import Kpi, KpiCalculationRule, KpiTarget
 from app.models.organization import Plant, Shift
 from app.models.performance import PerformanceRecord, PerformanceScore
-from app.services.kpi_engine import CalculationRuleParams, calculate_score
+from app.services.kpi_engine import compute_score_for_rule
 from app.services.providers.base import PerformanceDataProvider, RawPerformanceRecord
 from app.services.target_resolver import NoTargetFoundError, resolve_target
 
@@ -179,6 +179,7 @@ def run_ingestion(
                 "shift_id": shift.id,
                 "foreman_id": foreman.id,
                 "kpi_id": kpi.id,
+                "production_record_id": raw.production_record_id,
                 "target_value": target_value,
                 "actual_value": raw.actual_value,
                 "numerator_value": raw.numerator_value,
@@ -198,13 +199,12 @@ def run_ingestion(
         if status == DataQualityStatus.COMPLETE and target_value is not None:
             rule = lookups.calculation_rules.get(kpi.code)
             if rule is not None:
-                params = CalculationRuleParams(
-                    calculation_type=rule.calculation_type,
-                    min_score=float(kpi.min_score),
-                    max_score=float(kpi.max_score),
-                    **rule.parameters,
+                score = compute_score_for_rule(
+                    rule.calculation_type, rule.parameters,
+                    actual=float(raw.actual_value), target=float(target_value),
+                    numerator=raw.numerator_value, denominator=raw.denominator_value,
+                    min_score=float(kpi.min_score), max_score=float(kpi.max_score),
                 )
-                score = calculate_score(float(raw.actual_value), float(target_value), params)
                 weight = float(kpi.weight)
                 score_batch.append(
                     {

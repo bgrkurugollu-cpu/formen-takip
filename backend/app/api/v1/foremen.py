@@ -2,12 +2,14 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.turkish import turkish_sort_key
 from app.db.session import get_db
+from app.models.contribution import ContributionWork, ContributionWorkForeman
+from app.models.enums import ContributionRole, ContributionStatus, ContributionWorkType
 from app.models.foreman import Chief, Foreman, ForemanAssignment
 from app.models.kpi import Kpi, KpiCalculationRule
 from app.models.organization import Plant, Shift
@@ -222,18 +224,48 @@ def foreman_kpis(
         kpi = kpis_by_id.get(row["kpi_id"])
         if kpi is None:
             continue
-        items.append(
-            {
-                "kpi_id": str(row["kpi_id"]), "code": kpi.code, "name": kpi.name, "unit": kpi.unit,
-                "avg_target": round(float(row["avg_target"]), kpi.decimal_places) if row["avg_target"] is not None else None,
-                "avg_actual": round(float(row["avg_actual"]), kpi.decimal_places) if row["avg_actual"] is not None else None,
-                "avg_raw_score": round(float(row["avg_raw_score"]), 2),
-                "avg_capped_score": round(float(row["avg_capped_score"]), 2),
-                "weight": float(row["weight"]),
-                "weighted_contribution_sum": round(float(row["contrib_sum"]), 2),
-                "record_count": row["record_count"],
+        avg_target = float(row["avg_target"]) if row["avg_target"] is not None else None
+        avg_actual = float(row["avg_actual"]) if row["avg_actual"] is not None else None
+        item = {
+            "kpi_id": str(row["kpi_id"]), "code": kpi.code, "name": kpi.name,
+            "description": kpi.description, "unit": kpi.unit,
+            "avg_target": round(avg_target, kpi.decimal_places) if avg_target is not None else None,
+            "avg_actual": round(avg_actual, kpi.decimal_places) if avg_actual is not None else None,
+            "avg_raw_score": round(float(row["avg_raw_score"]), 2),
+            "avg_capped_score": round(float(row["avg_capped_score"]), 2),
+            "weight": float(row["weight"]),
+            "weighted_contribution_sum": round(float(row["contrib_sum"]), 2),
+            "record_count": row["record_count"],
+            "calculation_version": row["calculation_version"],
+            "calculation_period": {"date_from": filters.date_from.isoformat(), "date_to": filters.date_to.isoformat()},
+            "data_quality_status": "complete" if row["record_count"] > 0 else "missing",
+            "source_system": "SYNTHETIC",
+        }
+        # KPI'a özel ek alanlar (spec bölüm 14) — mevcut dönemsel toplamlardan (yeni sorgu gerektirmeden)
+        # türetilir; ham teknik/imalat/diğer dakika kırılımı veya plan/fiili ayrı miktarları gibi daha
+        # ayrıntılı alanlar bilinçli olarak kapsam dışı bırakıldı.
+        if kpi.code == "AGIR_GITME" and avg_actual is not None:
+            direction = "OVERWEIGHT" if avg_actual > 0 else ("UNDERWEIGHT" if avg_actual < 0 else "ON_TARGET")
+            item["agir_gitme"] = {
+                "signed_value": round(avg_actual, kpi.decimal_places),
+                "absolute_value": round(abs(avg_actual), kpi.decimal_places),
+                "direction": direction,
+                "ratio_to_target": round(abs(avg_actual) / avg_target, 4) if avg_target else None,
             }
-        )
+        elif kpi.code == "INKITA":
+            item["inkita"] = {
+                "included_total": item["avg_actual"],
+                "included_components": ["TECHNICAL", "MANUFACTURING"],
+                "excluded_components": ["OTHER"],
+                "note": "Diğer duruş süresi puana dahil edilmez.",
+            }
+        elif kpi.code == "PLANA_UYUM" and avg_actual is not None:
+            direction = "OVER_PLAN" if avg_actual > 100 else ("UNDER_PLAN" if avg_actual < 100 else "ON_PLAN")
+            item["plana_uyum"] = {
+                "avg_attainment_pct": round(avg_actual, kpi.decimal_places),
+                "direction": direction,
+            }
+        items.append(item)
     items.sort(key=lambda i: kpis_by_id[UUID(i["kpi_id"])].display_order)
     return {"items": items}
 
@@ -308,3 +340,78 @@ def assignment_history(foreman_id: UUID, db: Session = Depends(get_db), _=Depend
             }
         )
     return {"items": items}
+
+
+@router.get("/{foreman_id}/contribution-summary")
+def foreman_contribution_summary(
+    foreman_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> dict:
+    """Formen detay sayfasındaki kompakt Katkı ve İyileştirme Çalışmaları kartı için hafif özet.
+
+    Yalnızca yayımlanmış çalışmalar dahil edilir. Ortak çalışmalarda maddi kazanç ve zaman
+    tasarrufu, formen kendi tek başına ürettiği kazanç gibi gösterilmesin diye çalışmadaki
+    formen sayısına eşit bölünerek (pay bulunmuyorsa otomatik eşit dağıtım) toplanır.
+    """
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+
+    rows = db.execute(
+        select(ContributionWork, ContributionWorkForeman.role)
+        .join(ContributionWorkForeman, ContributionWorkForeman.work_id == ContributionWork.id)
+        .where(
+            ContributionWorkForeman.foreman_id == foreman_id,
+            ContributionWork.status == ContributionStatus.PUBLISHED,
+        )
+    ).all()
+
+    empty = {
+        "total_contributions": 0, "smed_count": 0, "led_contributions": 0,
+        "verified_financial_gain": {}, "estimated_financial_gain": {},
+        "total_time_saving_minutes": 0.0, "last_contribution_date": None,
+    }
+    if not rows:
+        return empty
+
+    work_ids = [work.id for work, _ in rows]
+    participant_counts = dict(
+        db.execute(
+            select(ContributionWorkForeman.work_id, func.count())
+            .where(ContributionWorkForeman.work_id.in_(work_ids))
+            .group_by(ContributionWorkForeman.work_id)
+        ).all()
+    )
+
+    smed_count = 0
+    led_count = 0
+    verified: dict[str, float] = {}
+    estimated: dict[str, float] = {}
+    total_time_saving = 0.0
+    last_date: date | None = None
+
+    for work, role in rows:
+        share = 1 / participant_counts.get(work.id, 1)
+        if work.work_type == ContributionWorkType.SMED:
+            smed_count += 1
+        if role == ContributionRole.LEAD:
+            led_count += 1
+        if work.verified_amount is not None and work.currency is not None:
+            key = work.currency.value
+            verified[key] = verified.get(key, 0.0) + float(work.verified_amount) * share
+        if work.estimated_amount is not None and work.currency is not None:
+            key = work.currency.value
+            estimated[key] = estimated.get(key, 0.0) + float(work.estimated_amount) * share
+        if work.monthly_total_saving_minutes is not None:
+            total_time_saving += float(work.monthly_total_saving_minutes) * share
+        work_date = work.work_date or (work.published_at.date() if work.published_at else None)
+        if work_date and (last_date is None or work_date > last_date):
+            last_date = work_date
+
+    return {
+        "total_contributions": len(rows),
+        "smed_count": smed_count,
+        "led_contributions": led_count,
+        "verified_financial_gain": {k: round(v, 2) for k, v in verified.items()},
+        "estimated_financial_gain": {k: round(v, 2) for k, v in estimated.items()},
+        "total_time_saving_minutes": round(total_time_saving, 2),
+        "last_contribution_date": last_date.isoformat() if last_date else None,
+    }

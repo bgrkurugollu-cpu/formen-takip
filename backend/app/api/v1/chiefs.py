@@ -222,18 +222,45 @@ def chief_kpis(
         kpi = kpis_by_id.get(row["kpi_id"])
         if kpi is None:
             continue
-        items.append(
-            {
-                "kpi_id": str(row["kpi_id"]), "code": kpi.code, "name": kpi.name, "unit": kpi.unit,
-                "avg_target": round(float(row["avg_target"]), kpi.decimal_places) if row["avg_target"] is not None else None,
-                "avg_actual": round(float(row["avg_actual"]), kpi.decimal_places) if row["avg_actual"] is not None else None,
-                "avg_raw_score": round(float(row["avg_raw_score"]), 2),
-                "avg_capped_score": round(float(row["avg_capped_score"]), 2),
-                "weight": float(row["weight"]),
-                "weighted_contribution_sum": round(float(row["contrib_sum"]), 2),
-                "record_count": row["record_count"],
+        avg_target = float(row["avg_target"]) if row["avg_target"] is not None else None
+        avg_actual = float(row["avg_actual"]) if row["avg_actual"] is not None else None
+        item = {
+            "kpi_id": str(row["kpi_id"]), "code": kpi.code, "name": kpi.name,
+            "description": kpi.description, "unit": kpi.unit,
+            "avg_target": round(avg_target, kpi.decimal_places) if avg_target is not None else None,
+            "avg_actual": round(avg_actual, kpi.decimal_places) if avg_actual is not None else None,
+            "avg_raw_score": round(float(row["avg_raw_score"]), 2),
+            "avg_capped_score": round(float(row["avg_capped_score"]), 2),
+            "weight": float(row["weight"]),
+            "weighted_contribution_sum": round(float(row["contrib_sum"]), 2),
+            "record_count": row["record_count"],
+            "calculation_version": row["calculation_version"],
+            "calculation_period": {"date_from": filters.date_from.isoformat(), "date_to": filters.date_to.isoformat()},
+            "data_quality_status": "complete" if row["record_count"] > 0 else "missing",
+            "source_system": "SYNTHETIC",
+        }
+        if kpi.code == "AGIR_GITME" and avg_actual is not None:
+            direction = "OVERWEIGHT" if avg_actual > 0 else ("UNDERWEIGHT" if avg_actual < 0 else "ON_TARGET")
+            item["agir_gitme"] = {
+                "signed_value": round(avg_actual, kpi.decimal_places),
+                "absolute_value": round(abs(avg_actual), kpi.decimal_places),
+                "direction": direction,
+                "ratio_to_target": round(abs(avg_actual) / avg_target, 4) if avg_target else None,
             }
-        )
+        elif kpi.code == "INKITA":
+            item["inkita"] = {
+                "included_total": item["avg_actual"],
+                "included_components": ["TECHNICAL", "MANUFACTURING"],
+                "excluded_components": ["OTHER"],
+                "note": "Diğer duruş süresi puana dahil edilmez.",
+            }
+        elif kpi.code == "PLANA_UYUM" and avg_actual is not None:
+            direction = "OVER_PLAN" if avg_actual > 100 else ("UNDER_PLAN" if avg_actual < 100 else "ON_PLAN")
+            item["plana_uyum"] = {
+                "avg_attainment_pct": round(avg_actual, kpi.decimal_places),
+                "direction": direction,
+            }
+        items.append(item)
     items.sort(key=lambda i: kpis_by_id[UUID(i["kpi_id"])].display_order)
     return {"items": items}
 

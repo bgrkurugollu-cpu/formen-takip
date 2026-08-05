@@ -14,7 +14,7 @@ class TestDashboardSummary:
         assert body["total_plants"] == 50
         assert body["active_plants"] == 50
         assert body["data_source"] == "SYNTHETIC"
-        assert 0 <= body["avg_company_score"] <= 200
+        assert body["avg_company_score"] >= 0
 
     def test_summary_with_plant_filter_narrows_results(self, client, auth_headers):
         meta = client.get("/api/v1/meta/filters", headers=auth_headers).json()

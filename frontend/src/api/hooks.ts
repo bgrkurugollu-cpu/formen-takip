@@ -4,17 +4,28 @@ import type {
   ActionPlanCreatePayload,
   ActionPlanItem,
   ActionPlanUpdatePayload,
+  AnalysisMode,
+  AnomalyDetail,
+  AnomalyListItem,
+  AnomalyStatus,
+  AnomalySummary,
+  AnomalyToolCallItem,
   AssignmentHistoryItem,
   AuditLogEntry,
   CalculationDetail,
   ChiefDetail,
   ChiefForemanItem,
   ChiefListItem,
+  ContributionSummary,
+  ContributionWorkCreatePayload,
+  ContributionWorkItem,
+  ContributionWorkUpdatePayload,
   DashboardSummary,
   DataQualityIssue,
   DataQualitySummary,
   DistributionItem,
   FilterOptionsResponse,
+  ForemanContributionSummary,
   ForemanDetail,
   ForemanKpiItem,
   ForemanListItem,
@@ -201,6 +212,28 @@ export function useForemanAssignmentHistory(foremanId: string | undefined) {
   });
 }
 
+export function useForemanContributionSummary(foremanId: string | undefined) {
+  return useQuery({
+    enabled: !!foremanId,
+    queryKey: ["foremen", foremanId, "contribution-summary"],
+    queryFn: async () =>
+      (await apiClient.get<ForemanContributionSummary>(`/foremen/${foremanId}/contribution-summary`)).data,
+  });
+}
+
+export function useForemanRecentContributions(foremanId: string | undefined, enabled: boolean) {
+  return useQuery({
+    enabled: !!foremanId && enabled,
+    queryKey: ["foremen", foremanId, "contributions", "recent"],
+    queryFn: async () =>
+      (
+        await apiClient.get<PagedResponse<ContributionWorkItem>>("/contribution-works", {
+          params: { foreman_ids: foremanId, status: "published", page: 1, page_size: 3 },
+        })
+      ).data,
+  });
+}
+
 export function useChiefs(params: Params) {
   return useQuery({
     queryKey: ["chiefs", params],
@@ -349,4 +382,132 @@ export function useGenerateReport() {
 
 export function downloadReportUrl(reportId: string): string {
   return `/api/v1/reports/${reportId}/download`;
+}
+
+export function useContributionWorks(params: Params) {
+  return useQuery({
+    queryKey: ["contribution-works", params],
+    queryFn: async () => (await apiClient.get<PagedResponse<ContributionWorkItem>>("/contribution-works", { params })).data,
+  });
+}
+
+export function useContributionWork(id: string | undefined) {
+  return useQuery({
+    queryKey: ["contribution-works", id],
+    queryFn: async () => (await apiClient.get<ContributionWorkItem>(`/contribution-works/${id}`)).data,
+    enabled: !!id,
+  });
+}
+
+export function useCreateContributionWork() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ContributionWorkCreatePayload) =>
+      (await apiClient.post<ContributionWorkItem>("/contribution-works", payload)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contribution-works"] });
+    },
+  });
+}
+
+export function useUpdateContributionWork() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: ContributionWorkUpdatePayload }) =>
+      (await apiClient.patch<ContributionWorkItem>(`/contribution-works/${id}`, payload)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contribution-works"] });
+    },
+  });
+}
+
+export function useDeleteContributionWork() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/contribution-works/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contribution-works"] });
+    },
+  });
+}
+
+export function useContributionSummary(params: Params = {}) {
+  return useQuery({
+    queryKey: ["contribution-works", "summary", params],
+    queryFn: async () => (await apiClient.get<ContributionSummary>("/contribution-works/summary", { params })).data,
+  });
+}
+
+// --- Tespitler (Anomalies) ---
+
+export function useAnomalies(params: Params) {
+  return useQuery({
+    queryKey: ["anomalies", params],
+    queryFn: async () => (await apiClient.get<PagedResponse<AnomalyListItem>>("/anomalies", { params })).data,
+  });
+}
+
+export function useAnomalySummary() {
+  return useQuery({
+    queryKey: ["anomalies", "summary"],
+    queryFn: async () => (await apiClient.get<AnomalySummary>("/anomalies/summary")).data,
+  });
+}
+
+export function useAnomaly(id: string | undefined) {
+  return useQuery({
+    queryKey: ["anomalies", id],
+    queryFn: async () => (await apiClient.get<AnomalyDetail>(`/anomalies/${id}`)).data,
+    enabled: !!id,
+  });
+}
+
+export interface AnalyzeAnomalyPayload {
+  id: string;
+  mode?: AnalysisMode;
+  force_refresh?: boolean;
+}
+
+export function useAnalyzeAnomaly() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: AnalyzeAnomalyPayload) =>
+      (await apiClient.post<AnomalyDetail>(`/anomalies/${id}/analyze`, body)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["anomalies"] });
+    },
+  });
+}
+
+export function useReanalyzeAnomaly() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: AnalyzeAnomalyPayload) =>
+      (await apiClient.post<AnomalyDetail>(`/anomalies/${id}/reanalyze`, body)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["anomalies"] });
+    },
+  });
+}
+
+export function useUpdateAnomalyStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: AnomalyStatus }) =>
+      (await apiClient.patch<AnomalyDetail>(`/anomalies/${id}/status`, { status })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["anomalies"] });
+    },
+  });
+}
+
+export function useAnalysisToolCalls(analysisId: string | undefined) {
+  return useQuery({
+    queryKey: ["analyses", analysisId, "tool-calls"],
+    queryFn: async () =>
+      (await apiClient.get<{ items: AnomalyToolCallItem[]; total: number }>(`/analyses/${analysisId}/tool-calls`)).data,
+    enabled: !!analysisId,
+  });
 }

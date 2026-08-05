@@ -5,7 +5,7 @@ import { accentLineColor, resolveChartInk } from "../../lib/chartColors";
 import { useTheme } from "../../context/ThemeContext";
 import { EmptyState } from "../StateViews";
 
-export function TrendChart({ points }: { points: TrendPoint[] }) {
+export function TrendChart({ points, yAxisFloor }: { points: TrendPoint[]; yAxisFloor?: number }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const ink = resolveChartInk(isDark);
@@ -13,6 +13,9 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
   if (points.length === 0) return <EmptyState />;
 
   const hasUnreliable = points.some((p) => !p.is_reliable);
+  // Varsayılan olarak 0'dan başlar; `yAxisFloor` verildiğinde (ör. en düşük formen puanının
+  // 20 altı) eksen o değerden başlar, böylece 100'e yakın kümelenen puanlar düz görünmez.
+  const domainMin = yAxisFloor !== undefined ? Math.max(0, Math.floor(yAxisFloor)) : 0;
 
   return (
     <div>
@@ -20,7 +23,7 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
         <LineChart data={points} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={ink.grid} vertical={false} />
           <XAxis dataKey="date" tick={{ fontSize: 11, fill: ink.muted }} tickLine={false} axisLine={{ stroke: ink.axis }} />
-          <YAxis tick={{ fontSize: 11, fill: ink.muted }} tickLine={false} axisLine={false} width={36} />
+          <YAxis domain={[domainMin, "auto"]} tick={{ fontSize: 11, fill: ink.muted }} tickLine={false} axisLine={false} width={36} />
           <ReferenceLine y={100} stroke={ink.muted} strokeDasharray="4 4" label={{ value: "Hedef (100)", fontSize: 10, fill: ink.muted, position: "insideTopRight" }} />
           <Tooltip
             formatter={(value) => [Number(value).toFixed(1), "Performans Puanı"]}

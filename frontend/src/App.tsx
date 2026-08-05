@@ -11,6 +11,10 @@ import { ForemenPage } from "./pages/ForemenPage";
 import { ForemanDetailPage } from "./pages/ForemanDetailPage";
 import { KpiAnalysisPage } from "./pages/KpiAnalysisPage";
 import { ActionPlansPage } from "./pages/ActionPlansPage";
+import { ImprovementWorksPage } from "./pages/ImprovementWorksPage";
+import { ImprovementWorkDetailPage } from "./pages/ImprovementWorkDetailPage";
+import { AnomaliesPage } from "./pages/AnomaliesPage";
+import { AnomalyDetailPage } from "./pages/AnomalyDetailPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { DataQualityPage } from "./pages/DataQualityPage";
 import { IntegrationStatusPage } from "./pages/IntegrationStatusPage";
@@ -42,6 +46,10 @@ function App() {
       <Route path="/foremen/:foremanId" element={<ProtectedRoute><ForemanDetailPage /></ProtectedRoute>} />
       <Route path="/kpis" element={<ProtectedRoute><KpiAnalysisPage /></ProtectedRoute>} />
       <Route path="/action-plans" element={<ProtectedRoute><ActionPlansPage /></ProtectedRoute>} />
+      <Route path="/improvement-works" element={<ProtectedRoute><ImprovementWorksPage /></ProtectedRoute>} />
+      <Route path="/improvement-works/:workId" element={<ProtectedRoute><ImprovementWorkDetailPage /></ProtectedRoute>} />
+      <Route path="/anomalies" element={<ProtectedRoute><AnomaliesPage /></ProtectedRoute>} />
+      <Route path="/anomalies/:anomalyId" element={<ProtectedRoute><AnomalyDetailPage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
       <Route path="/data-quality" element={<ProtectedRoute><DataQualityPage /></ProtectedRoute>} />
       <Route path="/integration-status" element={<ProtectedRoute><IntegrationStatusPage /></ProtectedRoute>} />

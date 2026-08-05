@@ -7,16 +7,27 @@ from app.services.kpi_engine import (
     KpiScoreInput,
     PerformanceLevel,
     aggregate_ratio_kpi,
+    calculate_custom_score,
     calculate_raw_score,
     calculate_score,
+    compute_score_for_rule,
     compute_weighted_total,
     direct_score,
     higher_is_better,
     lower_is_better,
+    period_ratio_score,
     proportional_penalty,
     range_target,
     resolve_performance_level,
+    score_gsf,
+    score_heavy_weight,
+    score_heavy_weight_from_period_ratio,
+    score_inkita,
+    score_iskarta,
+    score_plan_compliance,
+    score_plan_compliance_from_period_deviation,
     validate_kpi_weights,
+    weighted_geometric_score,
 )
 
 
@@ -222,3 +233,258 @@ class TestRatioAggregation:
 
     def test_zero_denominator_returns_zero(self):
         assert aggregate_ratio_kpi(0, 0) == 0
+
+
+class TestPeriodRatioScore:
+    def test_lower_is_better_target_met(self):
+        assert period_ratio_score(actual_sum=2, expected_sum=2, success_direction_higher=False) == pytest.approx(100)
+
+    def test_lower_is_better_below_target_scores_above_100(self):
+        assert period_ratio_score(actual_sum=1, expected_sum=2, success_direction_higher=False) == pytest.approx(200)
+
+    def test_lower_is_better_above_target_scores_below_100(self):
+        assert period_ratio_score(actual_sum=4, expected_sum=2, success_direction_higher=False) == pytest.approx(50)
+
+    def test_higher_is_better_above_target_scores_above_100(self):
+        assert period_ratio_score(actual_sum=100, expected_sum=95, success_direction_higher=True) == pytest.approx(105.26, abs=0.01)
+
+    def test_higher_is_better_below_target_scores_below_100(self):
+        assert period_ratio_score(actual_sum=85, expected_sum=95, success_direction_higher=True) == pytest.approx(89.47, abs=0.01)
+
+    def test_no_upper_or_lower_band_applied(self):
+        assert period_ratio_score(actual_sum=1, expected_sum=1000, success_direction_higher=False) == pytest.approx(100000)
+
+    def test_max_score_only_guards_against_near_zero_actual_overflow(self):
+        # Gerçekleşen toplam sıfıra çok yakınken bölme sonucu taşabilir — max_score yalnızca
+        # bu sayısal taşmayı önler, normal aralıktaki puanları etkilemez.
+        assert period_ratio_score(actual_sum=1e-12, expected_sum=1000, success_direction_higher=False, max_score=999999.99) == 999999.99
+        assert period_ratio_score(actual_sum=4, expected_sum=2, success_direction_higher=False, max_score=999999.99) == pytest.approx(50)
+
+
+class TestScoreHeavyWeight:
+    """Ağır Gitme (spec bölüm 4) — beklenen değerler spec'in kendi örnekleriyle birebir eşleşir."""
+
+    def test_target_met_exactly(self):
+        assert score_heavy_weight(0.40, 0.40).capped_score == pytest.approx(100.0)
+
+    def test_actual_zero_scores_above_100(self):
+        assert score_heavy_weight(0.00, 0.20).capped_score == pytest.approx(109.00)
+
+    def test_underweight_same_magnitude_as_overweight_scores_identically(self):
+        assert score_heavy_weight(-0.02, 0.20).capped_score == pytest.approx(108.10)
+        assert score_heavy_weight(0.02, 0.20).capped_score == pytest.approx(108.10)
+
+    def test_worse_than_target_uses_log_penalty(self):
+        assert score_heavy_weight(0.39, 0.20).capped_score == pytest.approx(88.44, abs=0.01)
+
+    def test_extreme_value_floored_at_zero_not_negative(self):
+        result = score_heavy_weight(-0.99, 0.10)
+        assert result.capped_score == pytest.approx(60.31, abs=0.01)
+        assert result.capped_score >= 0
+
+    def test_missing_or_invalid_target_raises(self):
+        with pytest.raises(KpiCalculationError):
+            score_heavy_weight(0.10, 0)
+        with pytest.raises(KpiCalculationError):
+            score_heavy_weight(0.10, -1)
+
+    def test_period_ratio_entry_point_matches_actual_target_entry_point(self):
+        direct = score_heavy_weight(0.39, 0.20)
+        via_ratio = score_heavy_weight_from_period_ratio(abs(0.39) / 0.20)
+        assert via_ratio.capped_score == pytest.approx(direct.capped_score)
+
+
+class TestScoreGsf:
+    """GSF (spec bölüm 5) — Iskarta'dan daha sert (bad_coefficient=16 > 12)."""
+
+    def test_target_met_exactly(self):
+        assert score_gsf(0.35, 0.35).capped_score == pytest.approx(100.0)
+
+    def test_below_target_scores_above_100(self):
+        assert score_gsf(0.27, 0.33).capped_score == pytest.approx(101.82, abs=0.01)
+
+    def test_tiny_target_uses_minimum_normalization_base(self):
+        assert score_gsf(0.00, 0.08).capped_score == pytest.approx(110.00, abs=0.01)
+
+    def test_worse_than_target(self):
+        assert score_gsf(0.40, 0.34).capped_score == pytest.approx(96.25, abs=0.01)
+
+    def test_extreme_value(self):
+        assert score_gsf(1.30, 0.35).capped_score == pytest.approx(69.71, abs=0.01)
+        assert score_gsf(3.81, 0.64).capped_score == pytest.approx(58.82, abs=0.01)
+
+    def test_zero_target_zero_actual_scores_100(self):
+        assert score_gsf(0.0, 0.0).capped_score == pytest.approx(100.0)
+
+    def test_negative_actual_raises(self):
+        with pytest.raises(KpiCalculationError):
+            score_gsf(-1.0, 0.5)
+
+
+class TestScoreIskarta:
+    """Iskarta (spec bölüm 6) — GSF'ye göre daha yumuşak (good=bad=12)."""
+
+    def test_target_met_exactly(self):
+        assert score_iskarta(0.80, 0.80).capped_score == pytest.approx(100.0)
+
+    def test_below_target_scores_above_100(self):
+        assert score_iskarta(0.50, 0.80).capped_score == pytest.approx(104.50)
+
+    def test_worse_than_target(self):
+        assert score_iskarta(1.10, 0.80).capped_score == pytest.approx(94.49, abs=0.01)
+        assert score_iskarta(1.80, 1.50).capped_score == pytest.approx(96.84, abs=0.01)
+
+    def test_same_absolute_diff_different_targets_scores_differently(self):
+        worse_relative = score_iskarta(1.10, 0.80).capped_score
+        better_relative = score_iskarta(1.80, 1.50).capped_score
+        assert worse_relative < better_relative
+
+    def test_extreme_value(self):
+        assert score_iskarta(1.00, 0.50).capped_score == pytest.approx(88.00)
+        assert score_iskarta(12.72, 1.50).capped_score == pytest.approx(62.99, abs=0.01)
+
+    def test_missing_or_invalid_target_raises(self):
+        with pytest.raises(KpiCalculationError):
+            score_iskarta(1.0, 0)
+        with pytest.raises(KpiCalculationError):
+            score_iskarta(1.0, -1)
+
+
+class TestScoreInkita:
+    """İnkita (spec bölüm 7) — actual her zaman Teknik+İmalat toplamı olmalı, Diğer hariç."""
+
+    def test_target_met_exactly(self):
+        assert score_inkita(2.08, 2.08).capped_score == pytest.approx(100.0)
+
+    def test_actual_zero_uses_minimum_base(self):
+        assert score_inkita(0.00, 1.10).capped_score == pytest.approx(106.00, abs=0.01)
+        assert score_inkita(0.00, 0.21).capped_score == pytest.approx(102.52, abs=0.01)
+
+    def test_worse_than_target(self):
+        assert score_inkita(2.01, 1.50).capped_score == pytest.approx(95.78, abs=0.01)
+        assert score_inkita(4.51, 1.41).capped_score == pytest.approx(83.23, abs=0.05)
+
+    def test_extreme_value(self):
+        assert score_inkita(10.07, 1.40).capped_score == pytest.approx(71.53, abs=0.01)
+
+    def test_target_zero_actual_zero_scores_100(self):
+        assert score_inkita(0.0, 0.0).capped_score == pytest.approx(100.0)
+
+    def test_target_zero_positive_actual_uses_bad_branch_with_minimum_base(self):
+        result = score_inkita(0.5, 0.0)
+        assert result.capped_score < 100.0
+
+    def test_negative_values_raise(self):
+        with pytest.raises(KpiCalculationError):
+            score_inkita(-1.0, 1.0)
+        with pytest.raises(KpiCalculationError):
+            score_inkita(1.0, -1.0)
+
+
+class TestScorePlanCompliance:
+    """Plana Uyum (spec bölüm 8) — plan altı/üstü aynı formül, %5 sınırında süreklilik."""
+
+    @pytest.mark.parametrize(
+        "deviation,expected",
+        [(0, 100), (1, 99), (3, 97), (5, 95), (10, 85), (20, 75), (40, 65)],
+    )
+    def test_deviation_examples_match_spec(self, deviation, expected):
+        assert score_plan_compliance_from_period_deviation(deviation).capped_score == pytest.approx(expected, abs=0.01)
+
+    def test_continuous_at_the_5_percent_boundary(self):
+        just_below = score_plan_compliance_from_period_deviation(4.999).capped_score
+        at_boundary = score_plan_compliance_from_period_deviation(5.0).capped_score
+        just_above = score_plan_compliance_from_period_deviation(5.001).capped_score
+        assert just_below == pytest.approx(at_boundary, abs=0.01)
+        assert just_above == pytest.approx(at_boundary, abs=0.01)
+
+    def test_over_plan_and_under_plan_score_identically(self):
+        over = score_plan_compliance(planned=1000, actual=1100)
+        under = score_plan_compliance(planned=1000, actual=900)
+        assert over.capped_score == pytest.approx(under.capped_score)
+
+    def test_production_record_examples_match_spec(self):
+        assert score_plan_compliance(15120, 15120).capped_score == pytest.approx(100.00, abs=0.01)
+        assert score_plan_compliance(28226, 28198).capped_score == pytest.approx(99.90, abs=0.01)
+        assert score_plan_compliance(46055, 47775).capped_score == pytest.approx(96.27, abs=0.01)
+        assert score_plan_compliance(24467, 28963).capped_score == pytest.approx(76.22, abs=0.01)
+        assert score_plan_compliance(262191, 182368).capped_score == pytest.approx(68.94, abs=0.01)
+
+    def test_missing_or_invalid_planned_raises(self):
+        with pytest.raises(KpiCalculationError):
+            score_plan_compliance(0, 100)
+        with pytest.raises(KpiCalculationError):
+            score_plan_compliance(-10, 100)
+
+
+class TestCustomFormulaDispatch:
+    def test_dispatches_signed_absolute_piecewise(self):
+        result = calculate_custom_score(0.39, 0.20, "SIGNED_ABSOLUTE_PIECEWISE", {"good_coefficient": 9, "bad_coefficient": 12})
+        assert result.capped_score == pytest.approx(88.44, abs=0.01)
+
+    def test_dispatches_hybrid_base_piecewise_log(self):
+        result = calculate_custom_score(
+            0.40, 0.34, "HYBRID_BASE_PIECEWISE_LOG",
+            {"minimum_normalization_base": 0.05, "good_coefficient": 10, "bad_coefficient": 16},
+        )
+        assert result.capped_score == pytest.approx(96.25, abs=0.01)
+
+    def test_dispatches_target_ratio_piecewise(self):
+        result = calculate_custom_score(1.10, 0.80, "TARGET_RATIO_PIECEWISE", {"good_coefficient": 12, "bad_coefficient": 12})
+        assert result.capped_score == pytest.approx(94.49, abs=0.01)
+
+    def test_unknown_formula_type_raises(self):
+        with pytest.raises(KpiCalculationError):
+            calculate_custom_score(1.0, 1.0, "NOT_A_REAL_FORMULA", {})
+
+
+class TestComputeScoreForRule:
+    def test_custom_formula_dispatches_to_new_engine(self):
+        result = compute_score_for_rule(
+            CalculationType.CUSTOM_FORMULA,
+            {"formula_type": "TARGET_RATIO_PIECEWISE", "good_coefficient": 12, "bad_coefficient": 12},
+            actual=1.10, target=0.80,
+        )
+        assert result.capped_score == pytest.approx(94.49, abs=0.01)
+
+    def test_plana_uyum_formula_type_uses_numerator_denominator_not_actual_target(self):
+        result = compute_score_for_rule(
+            CalculationType.CUSTOM_FORMULA,
+            {"formula_type": "PIECEWISE_LINEAR_LOGARITHMIC"},
+            actual=999, target=999,  # kasıtlı olarak yanlış — formül bunları hiç kullanmamalı
+            numerator=15120, denominator=15120,
+        )
+        assert result.capped_score == pytest.approx(100.0)
+
+    def test_non_custom_formula_falls_back_to_generic_engine(self):
+        result = compute_score_for_rule(CalculationType.HIGHER_IS_BETTER, {}, actual=950, target=1000, min_score=0, max_score=120)
+        assert result.capped_score == pytest.approx(95.0)
+
+    def test_no_ceiling_even_for_very_good_performance(self):
+        # Ağır Gitme'de actual=0 -> raw=109; hiçbir manuel tavan uygulanmamalı (spec rule 6/16).
+        result = compute_score_for_rule(
+            CalculationType.CUSTOM_FORMULA,
+            {"formula_type": "SIGNED_ABSOLUTE_PIECEWISE", "good_coefficient": 9, "bad_coefficient": 12},
+            actual=0.0, target=0.20,
+        )
+        assert result.capped_score == pytest.approx(109.0)
+        assert result.raw_score == result.capped_score
+
+
+class TestWeightedGeometricScore:
+    def test_equal_scores_return_same_score(self):
+        assert weighted_geometric_score([(100.0, 50.0), (100.0, 50.0)]) == pytest.approx(100)
+
+    def test_low_score_pulls_average_down_more_than_arithmetic_mean(self):
+        # Geometrik ortalama, tek bir çok yüksek KPI'nın diğer kötü sonucu gizlemesini engeller.
+        geometric = weighted_geometric_score([(200.0, 50.0), (50.0, 50.0)])
+        arithmetic = (200.0 * 0.5) + (50.0 * 0.5)
+        assert geometric == pytest.approx(100.0)
+        assert geometric < arithmetic
+
+    def test_missing_components_renormalize_weights(self):
+        # Sadece iki KPI'nın verisi varsa, ağırlıkları kendi aralarında 100'e tamamlanır.
+        assert weighted_geometric_score([(100.0, 30.0), (100.0, 20.0)]) == pytest.approx(100)
+
+    def test_no_components_returns_zero(self):
+        assert weighted_geometric_score([]) == 0
