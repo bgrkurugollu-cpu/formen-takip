@@ -55,13 +55,6 @@ export function GroupsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Gruplar</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-          Her grup bir şef ve ona bağlı formenlerden oluşur. Grup puanı, ekipteki formenlerin puan ortalamasıdır.
-        </p>
-      </div>
-
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
       <input
@@ -115,7 +108,9 @@ export function GroupsPage() {
                     <td className={`${tdClass} font-medium`} style={{ color: "var(--text-primary)" }}>{c.full_name}</td>
                     <td className={tdClass} style={{ color: "var(--text-muted)" }}>{c.employee_number}</td>
                     <td className={tdClass} style={{ color: "var(--text-secondary)" }}>{c.factory?.name ?? "-"}</td>
-                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>{c.plant?.name ?? "-"}</td>
+                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>
+                      {c.plants.length > 0 ? c.plants.map((p) => p.name).join(", ") : "-"}
+                    </td>
                     <td className={`${tdClass} tabular-nums`} style={{ color: "var(--text-secondary)" }}>{c.foreman_count}</td>
                     <td className={`${tdClass} font-medium tabular-nums`} style={{ color: "var(--text-primary)" }}>{c.total_score.toFixed(1)}</td>
                     <td className={tdClass}>

@@ -2,7 +2,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -60,7 +60,10 @@ class ForemanWorkCalendar(TimestampMixin, Base):
     Bir üretim kaydı yalnızca burada `is_working=True` bir satır varsa formene bağlanabilir."""
 
     __tablename__ = "foreman_work_calendar"
-    __table_args__ = (UniqueConstraint("foreman_id", "work_date", name="uq_foreman_work_calendar_foreman_date"),)
+    __table_args__ = (
+        UniqueConstraint("foreman_id", "work_date", "plant_id", name="uq_foreman_work_calendar_foreman_date_plant"),
+        ForeignKeyConstraint(["plant_id", "chief_id"], ["plants.id", "plants.chief_id"], name="fk_foreman_work_calendar_plant_chief"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     foreman_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("foremen.id"), nullable=False, index=True)
@@ -81,7 +84,10 @@ class ProductionRecord(TimestampMixin, Base):
     __tablename__ = "production_records"
     __table_args__ = (
         UniqueConstraint("source_system", "source_record_id", name="uq_production_record_source"),
-        UniqueConstraint("foreman_id", "production_date", "shift_id", name="uq_production_record_natural_key"),
+        UniqueConstraint(
+            "foreman_id", "production_date", "shift_id", "plant_id", name="uq_production_record_natural_key"
+        ),
+        ForeignKeyConstraint(["plant_id", "chief_id"], ["plants.id", "plants.chief_id"], name="fk_production_records_plant_chief"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

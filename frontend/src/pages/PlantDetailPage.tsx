@@ -33,16 +33,12 @@ export function PlantDetailPage() {
         <div>
           <button
             onClick={() => navigate("/plants")}
-            className="mb-1.5 flex items-center gap-1 text-xs font-medium hover:underline"
+            className="flex items-center gap-1 text-xs font-medium hover:underline"
             style={{ color: "var(--accent)" }}
           >
             <ChevronLeft size={13} strokeWidth={2} />
             Tesisler
           </button>
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{plant.data.name}</h1>
-          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            {plant.data.code} · {plant.data.factory?.name ?? "-"}
-          </p>
         </div>
         {summary.data && (
           <div className="text-right">

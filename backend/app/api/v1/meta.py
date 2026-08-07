@@ -31,11 +31,14 @@ def get_filter_options(
     chief_query = select(Chief).where(Chief.is_active.is_(True))
     if plant_ids:
         ids = [UUID(v) for v in plant_ids.split(",") if v.strip()]
-        chief_query = chief_query.where(Chief.plant_id.in_(ids))
+        chief_query = chief_query.where(Chief.id.in_(select(Plant.chief_id).where(Plant.id.in_(ids))))
     elif factory_ids:
         ids = [UUID(v) for v in factory_ids.split(",") if v.strip()]
-        chief_query = chief_query.where(Chief.plant_id.in_(select(Plant.id).where(Plant.factory_id.in_(ids))))
+        chief_query = chief_query.where(Chief.id.in_(select(Plant.chief_id).where(Plant.factory_id.in_(ids))))
     chiefs = list(db.scalars(chief_query.order_by(Chief.employee_number)))
+    plant_ids_by_chief: dict = {}
+    for p in db.scalars(select(Plant)):
+        plant_ids_by_chief.setdefault(p.chief_id, []).append(str(p.id))
 
     shifts = list(db.scalars(select(Shift).where(Shift.is_active.is_(True)).order_by(Shift.sequence)))
     kpis = list(db.scalars(select(Kpi).where(Kpi.is_active.is_(True)).order_by(Kpi.display_order)))
@@ -47,7 +50,10 @@ def get_filter_options(
             for p in plants
         ],
         "chiefs": [
-            {"id": str(c.id), "employee_number": c.employee_number, "name": f"{c.first_name} {c.last_name}", "plant_id": str(c.plant_id)}
+            {
+                "id": str(c.id), "employee_number": c.employee_number, "name": f"{c.first_name} {c.last_name}",
+                "plant_ids": plant_ids_by_chief.get(c.id, []),
+            }
             for c in chiefs
         ],
         "shifts": [{"id": str(s.id), "code": s.code, "name": s.name, "sequence": s.sequence} for s in shifts],

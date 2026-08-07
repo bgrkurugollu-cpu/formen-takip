@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useAnomalies, useAnomalySummary, useFilterOptions } from "../api/hooks";
 import { useAnomalyFilters } from "../hooks/useAnomalyFilters";
+import { DATE_PRESETS } from "../hooks/useFilters";
 import { Card, EmptyState, ErrorState, LoadingState } from "../components/StateViews";
 import { Pagination } from "../components/Pagination";
 import { AnalysisStatusBadge, SeverityBadge, StatusBadge } from "../components/AnomalyBadges";
@@ -75,15 +76,6 @@ export function AnomaliesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Tespitler</h1>
-        <p className="max-w-2xl text-[13px]" style={{ color: "var(--text-muted)" }}>
-          Üretim verilerinde makine öğrenmesi tarafından tespit edilmiş gibi davranan sentetik anormallikler ve
-          bunlara ilişkin yapay zekâ destekli analizler. Bu aşamada tüm tespitler ve analizler sentetik veriyle
-          üretilmiştir; gerçek bir ML modeli veya SAP/Ocean entegrasyonu kullanılmamaktadır.
-        </p>
-      </div>
-
       {summary.isLoading && <LoadingState />}
       {summary.isError && <ErrorState />}
       {summary.data && (
@@ -98,6 +90,25 @@ export function AnomaliesPage() {
       )}
 
       <div className="flex flex-wrap items-end gap-2 rounded-lg p-3" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <div>
+          <label className={labelClass} style={labelStyle}>Hazır tarih aralığı</label>
+          <select
+            className={fieldClass}
+            style={fieldStyle}
+            onChange={(e) => {
+              const preset = DATE_PRESETS.find((p) => p.label === e.target.value);
+              if (preset) {
+                const [from, to] = preset.getRange();
+                setFilters({ dateFrom: from, dateTo: to });
+                setPage(1);
+              }
+            }}
+            defaultValue=""
+          >
+            <option value="" disabled>Seçiniz</option>
+            {DATE_PRESETS.map((p) => <option key={p.label} value={p.label}>{p.label}</option>)}
+          </select>
+        </div>
         <div>
           <label className={labelClass} style={labelStyle}>Başlangıç</label>
           <input type="date" className={fieldClass} style={fieldStyle} value={filters.dateFrom}

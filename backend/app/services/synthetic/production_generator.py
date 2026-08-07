@@ -164,17 +164,27 @@ def seed_production_data(
 
     for foreman in ref.foremen:
         f_profile = foreman_profiles[foreman.id]
-        for assignment in assignments_by_foreman[foreman.id]:
-            range_start = max(assignment.start_date, period_start)
-            range_end = min(assignment.end_date or period_end, period_end)
-            if range_start > range_end:
-                continue
+        foreman_assignments = assignments_by_foreman[foreman.id]
+        if not foreman_assignments:
+            continue
 
+        # Bir formenin tüm eşzamanlı atamaları (2-4 tesis) aynı vardiyayı ve aynı tenure
+        # aralığını paylaşır (bkz. reference_data.py) — her atama kendi tesisi için ayrı
+        # günlük kayıt üretir (natural key'ler artık plant_id içeriyor, bkz. production.py).
+        tenure_start = foreman_assignments[0].start_date
+        tenure_end = foreman_assignments[0].end_date
+        range_start = max(tenure_start, period_start)
+        range_end = min(tenure_end or period_end, period_end)
+        if range_start > range_end:
+            continue
+
+        shift = shifts_by_id[foreman_assignments[0].shift_id]
+        night_penalty = -0.05 if shift.code == "V3" else (-0.015 if shift.code == "V2" else 0.0)
+
+        for assignment in foreman_assignments:
             plant_profile = plant_profiles[assignment.plant_id]
-            shift = shifts_by_id[assignment.shift_id]
             plant_lines = result.lines_by_plant[assignment.plant_id]
             products = plant_products[assignment.plant_id]
-            night_penalty = -0.05 if shift.code == "V3" else (-0.015 if shift.code == "V2" else 0.0)
 
             d = range_start
             while d <= range_end:
@@ -206,7 +216,7 @@ def seed_production_data(
 
                 pf = (
                     plant_profile["base"] + plant_profile["trend"] * (d - period_start).days
-                    + f_profile["skill"] + f_profile["trend"] * (d - assignment.start_date).days
+                    + f_profile["skill"] + f_profile["trend"] * (d - tenure_start).days
                     + night_penalty + weekend_factor + maintenance_factor
                     + _seasonal_factor(d) + anomaly + rng.gauss(0, 0.05)
                 )

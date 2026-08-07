@@ -24,14 +24,6 @@ export function AuditLogPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Denetim Kayıtları</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-          Giriş/çıkış denemeleri, rapor üretimi/indirme, aksiyon planı değişiklikleri ve senkronizasyon tetikleme
-          olaylarının salt-okunur kaydı.
-        </p>
-      </div>
-
       <select
         value={action}
         onChange={(e) => {

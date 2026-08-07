@@ -31,15 +31,14 @@ export function GroupDetailPage() {
         <div>
           <button
             onClick={() => navigate("/groups")}
-            className="mb-1.5 flex items-center gap-1 text-xs font-medium hover:underline"
+            className="flex items-center gap-1 text-xs font-medium hover:underline"
             style={{ color: "var(--accent)" }}
           >
             <ChevronLeft size={13} strokeWidth={2} />
             Gruplar
           </button>
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{c.full_name}</h1>
-          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            {c.employee_number} · {c.factory?.name} · {c.plant?.name} · {c.foreman_count} formen
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            {c.factory?.name ?? "-"} · {c.plants.length > 0 ? c.plants.map((p) => p.name).join(", ") : "-"}
           </p>
         </div>
         <div className="text-right">
@@ -58,7 +57,7 @@ export function GroupDetailPage() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card title="Şirket Sıralaması"><p className="text-xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{c.company_rank ?? "-"} / {c.company_total}</p></Card>
-        <Card title="Tesis İçi Sıralaması"><p className="text-xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{c.plant_rank ?? "-"} / {c.plant_total}</p></Card>
+        <Card title="Fabrika İçi Sıralaması"><p className="text-xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{c.factory_rank ?? "-"} / {c.factory_total}</p></Card>
         <Card title="Göreve Başlama"><p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{c.hire_date}</p></Card>
         <Card title="Durum"><p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{c.is_active ? "Aktif" : "Pasif"}</p></Card>
       </div>

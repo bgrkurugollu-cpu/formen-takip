@@ -144,8 +144,6 @@ export function AnomalyDetailPage() {
           <AnalysisStatusBadge status={a.analysis_status} />
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>{a.code}</span>
         </div>
-        <h1 className="mt-2 text-xl font-bold" style={{ color: "var(--text-primary)" }}>{a.title}</h1>
-        <p className="mt-1 max-w-3xl text-[13px]" style={{ color: "var(--text-secondary)" }}>{a.description}</p>
         <div className="mt-3 flex flex-wrap items-center gap-4 text-xs" style={{ color: "var(--text-muted)" }}>
           <span className="flex items-center gap-1"><Factory size={13} strokeWidth={2} />{a.factory_code} · {a.plant_name}</span>
           {a.shift_name && <span>{a.shift_name}</span>}

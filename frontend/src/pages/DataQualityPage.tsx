@@ -24,14 +24,6 @@ export function DataQualityPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Veri Kalitesi</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-          Eksik, hatalı, tekrarlı veya kaynakta düzeltilmesi gereken performans kayıtları. Bu kayıtlar sessizce
-          düzeltilmez — kaynak sistemde (SAP/sentetik üretici) düzeltilip yeniden senkronize edilmesi gerekir.
-        </p>
-      </div>
-
       {summary.isLoading && <LoadingState />}
       {summary.isError && <ErrorState />}
       {summary.data && (

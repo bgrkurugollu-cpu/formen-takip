@@ -37,8 +37,8 @@ def cmd_seed(args: argparse.Namespace) -> None:
         print(f"[1/3] Referans veri + KPI hedefleri üretiliyor (seed={args.seed})...")
         ref = seed_reference_data(
             db, rng,
-            min_foremen_per_plant=args.min_foremen,
-            max_foremen_per_plant=args.max_foremen,
+            min_plants_per_foreman=args.min_plants_per_foreman,
+            max_plants_per_foreman=args.max_plants_per_foreman,
             period_start=period_start,
             period_end=period_end,
         )
@@ -185,8 +185,8 @@ def main() -> None:
 
     seed_parser = sub.add_parser("seed", help="Organizasyon + sentetik performans verisi üretir")
     seed_parser.add_argument("--seed", type=int, default=42)
-    seed_parser.add_argument("--min-foremen", type=int, default=8)
-    seed_parser.add_argument("--max-foremen", type=int, default=25)
+    seed_parser.add_argument("--min-plants-per-foreman", type=int, default=2)
+    seed_parser.add_argument("--max-plants-per-foreman", type=int, default=4)
     seed_parser.add_argument("--start-date", type=str, default=None, help="YYYY-MM-DD")
     seed_parser.add_argument("--end-date", type=str, default=None, help="YYYY-MM-DD")
     seed_parser.add_argument("--missing-rate", type=float, default=0.02)

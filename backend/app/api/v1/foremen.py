@@ -21,17 +21,34 @@ from app.services.level_lookup import get_performance_levels, level_to_dict
 router = APIRouter(prefix="/foremen", tags=["foremen"])
 
 
-def _assignment_as_of(db: Session, foreman_id: UUID, as_of: date) -> ForemanAssignment | None:
-    return db.scalar(
-        select(ForemanAssignment)
-        .where(
-            ForemanAssignment.foreman_id == foreman_id,
-            ForemanAssignment.start_date <= as_of,
+def _assignments_as_of(db: Session, foreman_id: UUID, as_of: date) -> list[ForemanAssignment]:
+    return list(
+        db.scalars(
+            select(ForemanAssignment)
+            .where(
+                ForemanAssignment.foreman_id == foreman_id,
+                ForemanAssignment.start_date <= as_of,
+            )
+            .where((ForemanAssignment.end_date.is_(None)) | (ForemanAssignment.end_date >= as_of))
         )
-        .where((ForemanAssignment.end_date.is_(None)) | (ForemanAssignment.end_date >= as_of))
-        .order_by(ForemanAssignment.start_date.desc())
-        .limit(1)
     )
+
+
+def _assignments_to_dict(
+    assignments: list[ForemanAssignment], plants_by_id: dict, chiefs_by_id: dict
+) -> list[dict]:
+    ordered = sorted(assignments, key=lambda a: plants_by_id[a.plant_id].sequence_number)
+    items = []
+    for a in ordered:
+        plant = plants_by_id[a.plant_id]
+        chief = chiefs_by_id[a.chief_id]
+        items.append(
+            {
+                "plant": {"id": str(plant.id), "name": plant.name},
+                "chief": {"id": str(chief.id), "name": f"{chief.first_name} {chief.last_name}"},
+            }
+        )
+    return items
 
 
 @router.get("")
@@ -114,30 +131,32 @@ def list_foremen(
             return False
         return True
 
-    def current_assignment(fid: UUID) -> ForemanAssignment | None:
+    def matching_assignments(fid: UUID) -> list[ForemanAssignment]:
         candidates = [
             a for a in assignments_by_foreman.get(fid, [])
             if a.start_date <= filters.date_to and (a.end_date is None or a.end_date >= filters.date_from)
         ]
-        preferred = [a for a in candidates if matches_filters(a)] or candidates
-        return max(preferred, key=lambda a: a.start_date) if preferred else None
+        return [a for a in candidates if matches_filters(a)] or candidates
 
     full_items = []
     for f in all_foremen:
-        assignment = current_assignment(f.id)
+        assignments = matching_assignments(f.id)
         gs = scores_by_foreman.get(f.id)
         score = gs.total_score if gs else 0.0
-        plant = plants_by_id.get(assignment.plant_id) if assignment else None
-        shift = shifts_by_id.get(assignment.shift_id) if assignment else None
-        chief = chiefs_by_id.get(assignment.chief_id) if assignment else None
-        chief_name = f"{chief.first_name} {chief.last_name}" if chief else None
+        shift = shifts_by_id.get(assignments[0].shift_id) if assignments else None
+        assignment_items = _assignments_to_dict(assignments, plants_by_id, chiefs_by_id)
+        min_plant_seq = min(
+            (plants_by_id[a.plant_id].sequence_number for a in assignments), default=-1
+        )
+        # Bir formen artık her zaman TEK bir şefe bağlı olduğundan (bkz. Organizasyon
+        # Hiyerarşisi), tüm atamalar aynı şefi taşır — ilkini almak yeterlidir.
+        chief_name = assignment_items[0]["chief"]["name"] if assignment_items else ""
         level = resolve_performance_level(score, levels)
         full_items.append(
             {
                 "id": str(f.id), "employee_number": f.employee_number,
                 "full_name": f"{f.first_name} {f.last_name}", "is_active": f.is_active,
-                "plant": {"id": str(plant.id), "name": plant.name} if plant else None,
-                "chief": {"id": str(chief.id), "name": chief_name} if chief else None,
+                "assignments": assignment_items,
                 "shift": {"id": str(shift.id), "name": shift.name} if shift else None,
                 "total_score": round(score, 2),
                 "is_reliable": gs.is_reliable if gs else False,
@@ -145,7 +164,7 @@ def list_foremen(
                 "_sort": {
                     "name": (turkish_sort_key(f.first_name), turkish_sort_key(f.last_name)),
                     "employee_number": f.employee_number,
-                    "plant": plant.sequence_number if plant else -1,
+                    "plant": min_plant_seq,
                     "chief": turkish_sort_key(chief_name) if chief_name else (),
                     "shift": turkish_sort_key(shift.name) if shift else (),
                     "score": score,
@@ -175,10 +194,16 @@ def get_foreman(
         raise HTTPException(404, "Formen bulunamadı.")
 
     levels = get_performance_levels(db)
-    assignment = _assignment_as_of(db, foreman_id, filters.date_to)
-    plant = db.get(Plant, assignment.plant_id) if assignment else None
-    chief = db.get(Chief, assignment.chief_id) if assignment else None
-    shift = db.get(Shift, assignment.shift_id) if assignment else None
+    assignments = _assignments_as_of(db, foreman_id, filters.date_to)
+    plants_by_id = {p.id: p for p in db.scalars(select(Plant).where(Plant.id.in_({a.plant_id for a in assignments})))}
+    chiefs_by_id = {c.id: c for c in db.scalars(select(Chief).where(Chief.id.in_({a.chief_id for a in assignments})))}
+    assignment_items = _assignments_to_dict(assignments, plants_by_id, chiefs_by_id)
+    shift = db.get(Shift, assignments[0].shift_id) if assignments else None
+    # "Tesis İçi Sıralaması" formen birden fazla tesise bağlı olabileceğinden, sıralama
+    # yalnızca formenin en düşük sıra numaralı (birincil) tesisine göre hesaplanır.
+    primary_plant = min(
+        (plants_by_id[a.plant_id] for a in assignments), key=lambda p: p.sequence_number, default=None
+    )
 
     scoped_filters = Filters(date_from=filters.date_from, date_to=filters.date_to)
     all_scores = {s.key: s for s in analytics.foreman_scores(db, scoped_filters)}
@@ -188,7 +213,10 @@ def get_foreman(
     ranked = sorted(all_scores.values(), key=lambda s: s.total_score, reverse=True)
     company_rank = next((i + 1 for i, s in enumerate(ranked) if s.key == foreman_id), None)
 
-    plant_filters = Filters(date_from=filters.date_from, date_to=filters.date_to, plant_ids=[plant.id] if plant else None)
+    plant_filters = Filters(
+        date_from=filters.date_from, date_to=filters.date_to,
+        plant_ids=[primary_plant.id] if primary_plant else None,
+    )
     plant_scores = sorted(analytics.foreman_scores(db, plant_filters), key=lambda s: s.total_score, reverse=True)
     plant_rank = next((i + 1 for i, s in enumerate(plant_scores) if s.key == foreman_id), None)
 
@@ -196,8 +224,7 @@ def get_foreman(
         "id": str(foreman.id), "employee_number": foreman.employee_number,
         "full_name": f"{foreman.first_name} {foreman.last_name}",
         "hire_date": foreman.hire_date.isoformat(), "is_active": foreman.is_active,
-        "plant": {"id": str(plant.id), "name": plant.name} if plant else None,
-        "chief": {"id": str(chief.id), "name": f"{chief.first_name} {chief.last_name}"} if chief else None,
+        "assignments": assignment_items,
         "shift": {"id": str(shift.id), "name": shift.name} if shift else None,
         "total_score": round(total_score, 2),
         "is_reliable": my_score.is_reliable if my_score else False,

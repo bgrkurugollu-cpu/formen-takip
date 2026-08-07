@@ -15,7 +15,7 @@ pipeline'ı (bugün sentetik veri üreticisi, ileride SAP) üzerinden gerçekle�
 - [Backend API](#backend-api)
 - [Tespitler Modülü (Anomali Tespiti + Yapay Zekâ Analizi)](#tespitler-modülü-anomali-tespiti--yapay-zekâ-analizi)
   - [Aşama 2 — Tool Calling Destekli Analiz Ajanı](#aşama-2--tool-calling-destekli-analiz-ajanı)
-- [Katkı ve İyileştirme Çalışmaları](#katkı-ve-iyileştirme-çalışmaları)
+- [Katkılar](#katkılar)
 - [Frontend](#frontend)
 - [Veritabanı Şeması](#veritabanı-şeması)
 - [Kurulum (Docker)](#kurulum-docker)
@@ -61,22 +61,33 @@ bir parametre değildir. Tesisler `"{n}. Tesis"` biçiminde adlandırılır ve
 `sequence_number`'a göre sıralanmalı, `name`'e göre değil** ("10. Tesis"
 alfabetik olarak "2. Tesis"ten önce gelir).
 
+- Her tesisin tam olarak bir şefi vardır (`Plant.chief_id`), ama bir şef artık
+  tek bir tesise değil, **aynı fabrika içindeki tesislerden oluşan sabit bir
+  bölgeye** ("zone") sorumludur (`app/services/synthetic/reference_data.py::seed_reference_data`,
+  her fabrikanın tesisleri `min_plants_per_foreman`–`max_plants_per_foreman`
+  büyüklüğünde bölgelere ayrılır). Bu bölgedeki her formen (her vardiyada bir
+  tane, yani bir şefin **en az 2, tipik olarak 3** formeni olur) bölgenin
+  **tüm** tesislerinden sorumludur — bu yüzden bir formen hiçbir zaman birden
+  fazla şefe bağlı olamaz.
 - `Foreman` modeli organizasyon FK'sı taşımaz. Tüm yerleşim `ForemanAssignment`
   tablosunda SCD2 tarzı `start_date`/`end_date` aralıklarıyla tutulur: bir
-  formenin şefi ve tesisi görev süresi boyunca sabittir, yalnızca vardiyası
+  formenin şefi ve vardiyası görev süresi boyunca sabittir, yalnızca bölgesi
   ara dönemlerde değişebilir.
-- `(chief_id, plant_id) → chiefs(id, plant_id)` bileşik yabancı anahtarı,
-  şef/tesis uyuşmazlığını veritabanı seviyesinde imkânsız kılar.
+- `(plant_id, chief_id) → plants(id, chief_id)` bileşik yabancı anahtarı
+  (`foreman_assignments`, `foreman_work_calendar` ve `production_records`
+  üzerinde tekrarlanır), tesis/şef uyuşmazlığını veritabanı seviyesinde
+  imkânsız kılar.
 - Kimlikler benzersiz ve kendini açıklayan biçimde üretilir: ad/soyad çiftleri
   `FIRST_NAMES × LAST_NAMES` (80 × 70 = 5600 kombinasyon) kartezyen çarpımından
   **yerine koymadan** (without replacement) örneklenir, böylece ~1000 kişilik
-  havuzda hiçbir şef veya formen aynı tam adı taşımaz. Sicil numaraları
-  tesisi kodlar (`SCL-29-004`, `SEF-29-01`) ve sözlüksel sıralama sayısal
-  sıralamayla eşleşsin diye sıfırla doldurulur.
+  havuzda hiçbir şef veya formen aynı tam adı taşımaz. Şef sicil numaraları
+  artık tek bir tesisi değil bölgeyi kodlar (`SEF-003`); formen sicil
+  numaraları vardiyayı kodlar (`SCL-V1-014`) — ikisi de sözlüksel sıralama
+  sayısal sıralamayla eşleşsin diye sıfırla doldurulur.
 
 `docker compose exec backend python -m app.cli regenerate-personnel-identities`
 komutu, mevcut şef/formen ad-soyad ve sicil numaralarını performans verisine
-dokunmadan (~1,3M satır UUID ile referans verir) yeniden üretir — isim
+dokunmadan (satırlar UUID ile referans verir) yeniden üretir — isim
 havuzlarını değiştirdikten sonra tam yeniden seed yerine kullanılır.
 
 ## Veri Akışı: Sağlayıcı → Ingestion → Skor
@@ -250,7 +261,7 @@ OpenAPI dokümantasyonu: `http://localhost:8000/docs`.
 | `data_quality` | `GET /issues`, `/summary` |
 | `integration` | `GET /runs`, `/runs/{id}`, `POST /resync` |
 | `action_plans` | `GET /`, `POST /`, `GET /{id}`, `PATCH /{id}` |
-| `contributions` | `GET /contribution-works`, `/summary`, `/{id}`, `/{id}/pdf`, `POST /`, `PATCH /{id}`, `DELETE /{id}` — bkz. [Katkı ve İyileştirme Çalışmaları](#katkı-ve-iyileştirme-çalışmaları) |
+| `contributions` | `GET /contribution-works`, `/summary`, `/{id}`, `/{id}/pdf`, `POST /`, `PATCH /{id}`, `DELETE /{id}` — bkz. [Katkılar](#katkılar) |
 | `anomalies` | `GET /anomalies`, `/summary`, `/{id}`, `POST /{id}/analyze`, `/{id}/reanalyze`, `GET /{id}/analysis`, `PATCH /{id}/status` — bkz. [Tespitler Modülü](#tespitler-modülü-anomali-tespiti--yapay-zekâ-analizi) |
 | `analyses` | `GET /analyses/{id}`, `GET /analyses/{id}/tool-calls` — Aşama 2 tool calling geçmişi |
 | `reports` | `POST /generate`, `GET /`, `GET /{id}/download` |
@@ -510,7 +521,7 @@ devam etmesi. Frontend tarafında
 `frontend/scripts/smoke_test_tool_calling.mjs` (Playwright) liste sayfası,
 filtreleme, detay sayfası ve analiz akışını uçtan uca doğrular.
 
-## Katkı ve İyileştirme Çalışmaları
+## Katkılar
 
 Formenlerin/şeflerin ürettiği iyileştirme çalışmalarını (SMED, Kaizen, sorun
 çözme vb.) kaydeden, mali kazanç doğrulaması ve PDF raporu üreten bağımsız
@@ -554,7 +565,7 @@ doğrulaması olmayan istekler `/login`'e yönlendirilir (`ProtectedRoute`).
 | Formenler / Formen Detayı | `/foremen`, `/foremen/:foremanId` |
 | KPI Analizi | `/kpis` |
 | Aksiyon Planları | `/action-plans` |
-| Katkı ve İyileştirme Çalışmaları / Detay | `/improvement-works`, `/improvement-works/:workId` |
+| Katkılar / Detay | `/improvement-works`, `/improvement-works/:workId` |
 | Tespitler / Tespit Detayı | `/anomalies`, `/anomalies/:anomalyId` |
 | Raporlar | `/reports` |
 | Veri Kalitesi | `/data-quality` |
@@ -602,7 +613,8 @@ Ana tablo grupları (SQLAlchemy 2.0 `Mapped`/`mapped_column`, `app/models/`):
 - **Aksiyon/rapor:** `action_plans`, `report_exports`
 - **Katkı ve iyileştirme çalışmaları:** `contribution_works`,
   `contribution_work_foremen`, `contribution_gains`
-- **Tespitler:** `anomalies`, `anomaly_analyses`
+- **Tespitler:** `anomalies`, `anomaly_analyses`, `anomaly_tool_calls` (Aşama 2
+  tool calling geçmişi)
 - **Kimlik/denetim:** `users`, `audit_logs`
 
 Alembic migration geçmişi (`backend/alembic/versions/`, `down_revision`
@@ -628,7 +640,24 @@ zincirine göre sıralı):
 8. `d3e5a7c9f102` — katkı ve iyileştirme çalışmaları tabloları
 9. `e1b2c4d6f8a0` — tespitler (anomali) tabloları
 10. `f2a4b8e6c9d1` — katkı çalışmalarına formen rolü (`LEAD`/`CONTRIBUTOR`)
-    ekler (HEAD)
+    ekler
+11. `a4c8e0b2d6f1` — tool calling destekli analiz ajanı: `anomaly_tool_calls`
+    tablosu, `anomaly_analyses.mode`/`investigation_plan`/`error_code`
+    kolonları, genişletilmiş analiz durumları — bkz.
+    [Aşama 2 — Tool Calling Destekli Analiz Ajanı](#aşama-2--tool-calling-destekli-analiz-ajanı)
+12. `b7c9e1a3d5f2` — `foreman_assignments(plant_id, shift_id) WHERE is_active`
+    üzerinde kısmi benzersiz indeks: bir tesisin bir vardiyasından aynı anda
+    yalnızca bir formen sorumlu olabilir
+13. `c3e5f7a9b1d4` — `foreman_work_calendar`/`production_records` doğal
+    anahtarlarına `plant_id` ekler (formen 2-4 eşzamanlı tesise bağlı
+    olabildiğinden gerekli)
+14. `a1b3c5d7e9f2` — **şef artık tek tesise değil bölgeye (zone) sorumlu.**
+    `chiefs.plant_id` kaldırılır, `plants.chief_id` eklenir (yön tersine
+    döner); `(plant_id, chief_id) → plants(id, chief_id)` kompozit FK'si
+    `foreman_assignments`/`foreman_work_calendar`/`production_records`'a
+    eklenir. Karaman migration'ıyla aynı gerekçeyle yıkıcıdır (organizasyon
+    kimlikleri kökten değiştiği için `TRUNCATE` eder, `downgrade()`
+    `NotImplementedError` fırlatır) (HEAD)
 
 `alembic upgrade head`, backend konteyneri her başladığında otomatik
 çalışır (`backend/Dockerfile` CMD'si).
@@ -676,14 +705,21 @@ KPI hedefleri), `[2/3]` sentetik üretim verisi
 `[3/3]` bu üretim verisinden KPI türetme + ingestion, ardından (admin
 varsa) katkı çalışması örnekleri ve son olarak Tespitler modülü için
 sentetik ML tespitleri (`seed-anomalies`). Varsayılan olarak son 12 ay için
-~1,3 milyon performans kaydı üretir — birkaç dakika sürebilir, arka planda
-çalıştırın. Yalnızca boş bir veritabanında (veya `--force` ile) çalışır ve
-mevcut referans veriyi üzerine yazmaz. Sıfırdan yeniden üretmek için önce
-ilgili tabloları temizleyin:
+~50–75K performans kaydı üretir (`docker compose exec backend python -m app.cli seed`
+çıktısındaki `[3/3]` satırı `başarılı` sayısı) — birkaç dakika sürebilir,
+arka planda çalıştırın. Bu, ham üretim kaydı sayısından belirgin düşüktür:
+`performance_records`'ın doğal anahtarı (`foreman_id`, `kpi_id`, `chief_id`,
+`shift_id`, `performance_date`) `plant_id` içermez, bu yüzden bir formenin
+aynı gün sorumlu olduğu 2-4 tesisin ürettiği KPI kayıtlarından yalnızca
+ilki eklenir, geri kalanı `DUPLICATE` olarak atlanır (bkz.
+[Veri Akışı](#veri-akışı-sağlayıcı--ingestion--skor)). Yalnızca boş bir
+veritabanında (veya `--force` ile) çalışır ve mevcut referans veriyi
+üzerine yazmaz. Sıfırdan yeniden üretmek için önce ilgili tabloları
+temizleyin:
 
 ```bash
 docker compose exec -T postgres psql -U formen -d formen_takip -c \
-  "TRUNCATE plants, foremen, kpi_targets, integration_runs, shifts, kpis, performance_level_rules CASCADE;"
+  "TRUNCATE factories, plants, chiefs, foremen, kpi_targets, integration_runs, shifts, kpis, performance_level_rules, products, company_calendar CASCADE;"
 ```
 
 Sentetik veri üretici parametreleri (`app/cli.py`):

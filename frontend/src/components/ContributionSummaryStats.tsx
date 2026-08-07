@@ -4,7 +4,7 @@ import { LoadingState, ErrorState } from "./StateViews";
 import { useContributionSummary } from "../api/hooks";
 import { formatMinutes, formatMoney } from "../lib/contributionCalc";
 
-export function ContributionSummaryStats({ title = "Katkı ve İyileştirme Çalışmaları Özeti", onViewAll, linkStatsTo, params }: {
+export function ContributionSummaryStats({ title = "Katkılar Özeti", onViewAll, linkStatsTo, params }: {
   title?: string;
   onViewAll?: () => void;
   linkStatsTo?: string;

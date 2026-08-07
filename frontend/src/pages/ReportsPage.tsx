@@ -62,13 +62,6 @@ export function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Raporlar</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-          Filtrelenmiş sonuçları Excel, CSV veya PDF olarak dışa aktarın.
-        </p>
-      </div>
-
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
       <Card title="Yeni Rapor Oluştur">

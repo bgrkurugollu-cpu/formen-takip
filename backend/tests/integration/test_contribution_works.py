@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models.contribution import ContributionWork, ContributionWorkForeman
+from app.models.enums import ContributionStatus
 from app.models.foreman import Foreman
 from app.models.organization import Plant
 from app.models.user import User
@@ -23,7 +24,15 @@ def _cleanup_contribution_works(db_session):
 
 def _sample_plant_and_foreman(db_session):
     plant = db_session.scalars(select(Plant).order_by(Plant.sequence_number)).first()
-    foreman = db_session.scalars(select(Foreman).where(Foreman.is_active.is_(True))).first()
+    # Sentetik seed verisi az sayıdaki formene rastgele katkı çalışmaları atayabildiğinden
+    # (bkz. contribution_generator.py), testin "sıfırdan başlar" varsayımını bozmamak için
+    # halihazırda yayımlanmış bir çalışması olan formenler eleniyor.
+    has_published_work = select(ContributionWorkForeman.foreman_id).join(
+        ContributionWork, ContributionWork.id == ContributionWorkForeman.work_id
+    ).where(ContributionWork.status == ContributionStatus.PUBLISHED)
+    foreman = db_session.scalars(
+        select(Foreman).where(Foreman.is_active.is_(True), Foreman.id.notin_(has_published_work))
+    ).first()
     return plant, foreman
 
 

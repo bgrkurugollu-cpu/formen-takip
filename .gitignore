@@ -50,6 +50,6 @@ pnpm-debug.log*
 Thumbs.db
 desktop.ini
 
-# --- Claude Code (bu makineye özel yerel ayarlar) ---
-.claude/settings.local.json
+# --- Claude Code (AI asistan config/prompt/memory dosyaları — repoya dahil edilmez) ---
+.claude/
 CLAUDE.md

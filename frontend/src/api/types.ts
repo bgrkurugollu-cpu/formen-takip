@@ -24,7 +24,7 @@ export interface ChiefOption {
   id: string;
   employee_number: string;
   name: string;
-  plant_id: string;
+  plant_ids: string[];
 }
 
 export interface FilterOption {
@@ -159,13 +159,17 @@ export interface PagedResponse<T> {
   page_size: number;
 }
 
+export interface ForemanAssignmentItem {
+  plant: { id: string; name: string };
+  chief: { id: string; name: string };
+}
+
 export interface ForemanListItem {
   id: string;
   employee_number: string;
   full_name: string;
   is_active: boolean;
-  plant: { id: string; name: string } | null;
-  chief: { id: string; name: string } | null;
+  assignments: ForemanAssignmentItem[];
   shift: { id: string; name: string } | null;
   total_score: number;
   is_reliable: boolean;
@@ -178,8 +182,7 @@ export interface ForemanDetail {
   full_name: string;
   hire_date: string;
   is_active: boolean;
-  plant: { id: string; name: string } | null;
-  chief: { id: string; name: string } | null;
+  assignments: ForemanAssignmentItem[];
   shift: { id: string; name: string } | null;
   total_score: number;
   is_reliable: boolean;
@@ -195,7 +198,7 @@ export interface ChiefListItem {
   employee_number: string;
   full_name: string;
   is_active: boolean;
-  plant: { id: string; name: string } | null;
+  plants: { id: string; name: string }[];
   factory: { id: string; code: string; name: string } | null;
   foreman_count: number;
   total_score: number;
@@ -209,7 +212,7 @@ export interface ChiefDetail {
   full_name: string;
   hire_date: string;
   is_active: boolean;
-  plant: { id: string; name: string } | null;
+  plants: { id: string; name: string }[];
   factory: { id: string; code: string; name: string } | null;
   foreman_count: number;
   total_score: number;
@@ -217,8 +220,8 @@ export interface ChiefDetail {
   level: PerformanceLevel;
   company_rank: number | null;
   company_total: number;
-  plant_rank: number | null;
-  plant_total: number;
+  factory_rank: number | null;
+  factory_total: number;
 }
 
 export interface ChiefForemanItem {

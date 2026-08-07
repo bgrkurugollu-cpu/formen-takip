@@ -141,12 +141,20 @@ export function FilterBar({ filters, setFilters, clearFilters }: Props) {
     [options]
   );
   const chiefOptions = useMemo(
-    () => (options?.chiefs ?? []).map((c) => ({ id: c.id, name: c.name, hint: plantNameById.get(c.plant_id) })),
+    () =>
+      (options?.chiefs ?? []).map((c) => {
+        const names = c.plant_ids.map((id) => plantNameById.get(id)).filter((n): n is string => !!n);
+        return {
+          id: c.id,
+          name: c.name,
+          hint: names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(", "),
+        };
+      }),
     [options, plantNameById]
   );
 
-  const plantIdByChief = useMemo(
-    () => new Map((options?.chiefs ?? []).map((c) => [c.id, c.plant_id])),
+  const plantIdsByChief = useMemo(
+    () => new Map((options?.chiefs ?? []).map((c) => [c.id, c.plant_ids])),
     [options]
   );
   const factoryIdByPlant = useMemo(
@@ -161,10 +169,7 @@ export function FilterBar({ filters, setFilters, clearFilters }: Props) {
     setFilters({
       factoryIds: ids,
       plantIds: filters.plantIds.filter(plantStillValid),
-      chiefIds: filters.chiefIds.filter((chiefId) => {
-        const plantId = plantIdByChief.get(chiefId);
-        return plantId ? plantStillValid(plantId) : false;
-      }),
+      chiefIds: filters.chiefIds.filter((chiefId) => (plantIdsByChief.get(chiefId) ?? []).some(plantStillValid)),
     });
   };
 
@@ -175,7 +180,7 @@ export function FilterBar({ filters, setFilters, clearFilters }: Props) {
       chiefIds:
         allowed.size === 0
           ? filters.chiefIds
-          : filters.chiefIds.filter((chiefId) => allowed.has(plantIdByChief.get(chiefId) ?? "")),
+          : filters.chiefIds.filter((chiefId) => (plantIdsByChief.get(chiefId) ?? []).some((id) => allowed.has(id))),
     });
   };
 

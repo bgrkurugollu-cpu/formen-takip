@@ -58,11 +58,6 @@ export function ForemenPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Formenler</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>Şirket genelindeki tüm formenlerin performans listesi.</p>
-      </div>
-
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
       <input
@@ -115,8 +110,12 @@ export function ForemenPage() {
                   >
                     <td className={`${tdClass} font-medium`} style={{ color: "var(--text-primary)" }}>{f.full_name}</td>
                     <td className={tdClass} style={{ color: "var(--text-muted)" }}>{f.employee_number}</td>
-                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>{f.plant?.name ?? "-"}</td>
-                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>{f.chief?.name ?? "-"}</td>
+                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>
+                      {f.assignments.length ? f.assignments.map((a) => a.plant.name).join(", ") : "-"}
+                    </td>
+                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>
+                      {f.assignments[0]?.chief.name ?? "-"}
+                    </td>
                     <td className={tdClass} style={{ color: "var(--text-secondary)" }}>{f.shift?.name ?? "-"}</td>
                     <td className={`${tdClass} font-medium tabular-nums`} style={{ color: "var(--text-primary)" }}>{f.total_score.toFixed(1)}</td>
                     <td className={tdClass}>

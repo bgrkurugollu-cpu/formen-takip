@@ -180,7 +180,9 @@ def plant_chiefs(
     filters.plant_ids = [plant_id]
     levels = get_performance_levels(db)
     scores_by_chief = {s.key: s for s in analytics.chief_scores(db, filters)}
-    chiefs = list(db.scalars(select(Chief).where(Chief.plant_id == plant_id).order_by(Chief.employee_number)))
+    plant = db.get(Plant, plant_id)
+    chief_ids = [plant.chief_id] if plant else []
+    chiefs = list(db.scalars(select(Chief).where(Chief.id.in_(chief_ids)).order_by(Chief.employee_number)))
 
     items = []
     for c in chiefs:

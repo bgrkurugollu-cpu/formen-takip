@@ -83,7 +83,7 @@ export function ImprovementWorkDetailPage() {
         style={{ color: "var(--accent)" }}
       >
         <ChevronLeft size={13} strokeWidth={2} />
-        Katkı ve İyileştirme Çalışmaları
+        Katkılar
       </button>
 
       {justPublished && (
@@ -136,9 +136,6 @@ export function ImprovementWorkDetailPage() {
             </button>
           </div>
         </div>
-
-        <h1 className="mt-3 text-2xl font-bold leading-tight" style={{ color: "var(--text-primary)" }}>{w.title}</h1>
-        {w.summary && <p className="mt-2 max-w-3xl text-[14px]" style={{ color: "var(--text-secondary)" }}>{w.summary}</p>}
 
         <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
           {w.plant && (

@@ -4,13 +4,11 @@ import { FilterBar } from "../components/FilterBar";
 import { StatCard } from "../components/StatCard";
 import { Card } from "../components/StateViews";
 import { LoadingState, ErrorState } from "../components/StateViews";
-import { PerformanceLevelBadge } from "../components/PerformanceLevelBadge";
 import { TrendChart } from "../components/charts/TrendChart";
 import { KpiBarChart } from "../components/charts/KpiBarChart";
 import { RankingBarChart } from "../components/charts/RankingBarChart";
 import { DistributionChart } from "../components/charts/DistributionChart";
 import { RelatedActionPlans } from "../components/RelatedActionPlans";
-import { ContributionSummaryStats } from "../components/ContributionSummaryStats";
 import {
   useDashboardSummary, useDashboardTrend, useKpiSummary, usePlantRanking,
   useShiftComparison, useForemanRanking, usePerformanceDistribution,
@@ -45,11 +43,6 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Genel Bakış</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>Şirket genelindeki üretim performansı özeti.</p>
-      </div>
-
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
       {summary.isLoading && <LoadingState />}
@@ -156,7 +149,7 @@ export function DashboardPage() {
                   <button onClick={() => navigate(`/foremen/${f.foreman_id}`)} className="truncate text-left hover:underline" style={{ color: "var(--text-secondary)" }}>
                     {f.full_name}
                   </button>
-                  <PerformanceLevelBadge level={f.level} />
+                  <span className="font-semibold tabular-nums" style={{ color: "var(--accent)" }}>{f.total_score.toFixed(1)}</span>
                 </div>
               ))}
             </div>
@@ -166,8 +159,6 @@ export function DashboardPage() {
       </div>
 
       <RelatedActionPlans title="Açık Aksiyon Planları" />
-
-      <ContributionSummaryStats onViewAll={() => navigate("/improvement-works")} linkStatsTo="/improvement-works" />
     </div>
   );
 }

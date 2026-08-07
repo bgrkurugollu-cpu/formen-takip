@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { to: "/foremen", label: "Formenler", icon: HardHat },
   { to: "/kpis", label: "KPI Analizi", icon: Target },
   { to: "/action-plans", label: "Aksiyon Planları", icon: ClipboardList },
-  { to: "/improvement-works", label: "Katkı ve İyileştirme Çalışmaları", icon: Sparkles },
+  { to: "/improvement-works", label: "Katkılar", icon: Sparkles },
   { to: "/anomalies", label: "Tespitler", icon: SearchCheck },
   { to: "/reports", label: "Raporlar", icon: FileText },
   { to: "/data-quality", label: "Veri Kalitesi", icon: FlaskConical },

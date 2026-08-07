@@ -31,13 +31,7 @@ export function ActionPlansPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Aksiyon Planları</h1>
-          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Düşük performanslı tesis/formen/KPI'lar için takip amaçlı planlar. Performans verisini değiştirmez.
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <button
           onClick={() => {
             setEditing(null);

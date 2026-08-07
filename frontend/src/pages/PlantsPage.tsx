@@ -19,11 +19,6 @@ export function PlantsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Tesisler</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>Şirket genelindeki 50 tesisin performans karşılaştırması.</p>
-      </div>
-
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
       <input

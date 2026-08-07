@@ -38,15 +38,6 @@ export function IntegrationStatusPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Entegrasyon Durumu</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-          Veri aktarım (senkronizasyon) geçmişi. Bu ortamda kaynak sentetik veri üreticisidir; "yeniden senkronize
-          et" performans verisi girmez, yalnızca aynı veri sağlayıcısını belirtilen tarih aralığı için tekrar
-          çalıştırır (zaten yüklenmiş kayıtlar idempotent biçimde atlanır).
-        </p>
-      </div>
-
       <Card title="Manuel Yeniden Senkronizasyon">
         <div className="flex flex-wrap items-end gap-3">
           <div>

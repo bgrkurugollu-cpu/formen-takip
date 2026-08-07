@@ -112,9 +112,9 @@ PERFORMANCE_LEVEL_SEED = [
 ]
 
 SHIFT_SEED = [
-    dict(code="V1", name="1. Vardiya", start="08:00", end="16:00", sequence=1),
-    dict(code="V2", name="2. Vardiya", start="16:00", end="00:00", sequence=2),
-    dict(code="V3", name="3. Vardiya", start="00:00", end="08:00", sequence=3),
+    dict(code="V1", name="1. Vardiya", start="07:00", end="15:00", sequence=1),
+    dict(code="V2", name="2. Vardiya", start="15:00", end="23:00", sequence=2),
+    dict(code="V3", name="3. Vardiya", start="23:00", end="07:00", sequence=3),
 ]
 
 
@@ -130,9 +130,6 @@ class ReferenceData:
     calculation_rules: dict[str, KpiCalculationRule] = field(default_factory=dict)
     targets: list[KpiTarget] = field(default_factory=list)
     performance_levels: list[PerformanceLevelRule] = field(default_factory=list)
-
-    def chiefs_by_plant(self, plant_id) -> list[Chief]:
-        return [c for c in self.chiefs if c.plant_id == plant_id]
 
 
 def _parse_time(value: str):
@@ -156,24 +153,30 @@ def _take_name(pool: list[tuple[str, str]]) -> tuple[str, str]:
     return pool.pop()
 
 
-def _chief_bucket_sizes(rng: random.Random, foreman_count: int) -> list[int]:
-    if foreman_count <= 0:
-        return []
-    low = max(1, foreman_count // 6)
-    high = max(1, foreman_count // 3)
-    chief_count = min(foreman_count, rng.randint(low, high))
-    sizes = [1] * chief_count
-    remaining = foreman_count - chief_count
-    for _ in range(remaining):
-        sizes[rng.randrange(chief_count)] += 1
-    return sizes
+def _partition_into_groups(rng: random.Random, items: list, min_size: int, max_size: int) -> list[list]:
+    pool = list(items)
+    rng.shuffle(pool)
+    groups: list[list] = []
+    i = 0
+    n = len(pool)
+    while i < n:
+        remaining = n - i
+        if remaining <= max_size:
+            size = remaining
+        else:
+            size = rng.randint(min_size, max_size)
+            if remaining - size < min_size:
+                size -= min_size - (remaining - size)
+        groups.append(pool[i : i + size])
+        i += size
+    return groups
 
 
 def seed_reference_data(
     db: Session,
     rng: random.Random,
-    min_foremen_per_plant: int,
-    max_foremen_per_plant: int,
+    min_plants_per_foreman: int,
+    max_plants_per_foreman: int,
     period_start: date,
     period_end: date,
 ) -> ReferenceData:
@@ -242,104 +245,99 @@ def seed_reference_data(
         factories_by_code[spec["code"]] = factory
 
     name_pool = _build_unique_name_pool(rng)
+
+    # Bir şef artık tek bir tesise değil, aynı fabrika içindeki tesislerden oluşan sabit bir
+    # bölgeye ("zone") sorumludur. Bu bölge aynı zamanda o bölgedeki her formenin (her
+    # vardiyada bir tane) sorumlu olduğu tesis kümesidir — böylece bir formenin tüm
+    # ForemanAssignment satırları her zaman AYNI (tek) şefi taşır; "bir formen birden fazla
+    # şefe bağlı kalamaz" kuralı üretim anında garanti edilir, DB'de de
+    # (plant_id, chief_id) kompozit FK'siyle desteklenir.
+    zones: list[tuple[Chief, list[Plant]]] = []
     sequence_number = 0
     for spec in FACTORY_SEED:
         factory = factories_by_code[spec["code"]]
+        factory_plant_specs = []
         for _ in range(spec["plant_count"]):
             sequence_number += 1
-            plant = Plant(
-                code=f"PLT{sequence_number:02d}",
-                name=f"{sequence_number}. Tesis",
-                sequence_number=sequence_number,
-                factory_id=factory.id,
-                description=f"{factory.name} bünyesindeki {sequence_number}. Tesis.",
-                is_active=True,
-                sap_plant_code=f"SAP-{sequence_number:04d}",
+            factory_plant_specs.append(
+                dict(
+                    code=f"PLT{sequence_number:02d}",
+                    name=f"{sequence_number}. Tesis",
+                    sequence_number=sequence_number,
+                    factory_id=factory.id,
+                    factory_name=factory.name,
+                )
             )
-            db.add(plant)
+
+        for group in _partition_into_groups(rng, factory_plant_specs, min_plants_per_foreman, max_plants_per_foreman):
+            chief_hire = _random_date(
+                rng, period_start - timedelta(days=365 * 5), period_end - timedelta(days=1)
+            )
+            chief_first, chief_last = _take_name(name_pool)
+            zone_idx = len(zones) + 1
+            chief = Chief(
+                employee_number=f"SEF-{zone_idx:03d}",
+                first_name=chief_first, last_name=chief_last,
+                hire_date=chief_hire, is_active=True,
+                sap_personnel_number=f"SAP-S-{zone_idx:03d}",
+            )
+            db.add(chief)
             db.flush()
-            ref.plants.append(plant)
+            ref.chiefs.append(chief)
 
-            foreman_count = rng.randint(min_foremen_per_plant, max_foremen_per_plant)
-            bucket_sizes = _chief_bucket_sizes(rng, foreman_count)
-
-            plant_chiefs: list[Chief] = []
-            for chief_idx, size in enumerate(bucket_sizes, start=1):
-                chief_hire = _random_date(
-                    rng, period_start - timedelta(days=365 * 5), period_end - timedelta(days=1)
+            zone_plants: list[Plant] = []
+            for pspec in sorted(group, key=lambda p: p["sequence_number"]):
+                plant = Plant(
+                    code=pspec["code"], name=pspec["name"], sequence_number=pspec["sequence_number"],
+                    factory_id=pspec["factory_id"], chief_id=chief.id,
+                    description=f"{pspec['factory_name']} bünyesindeki {pspec['sequence_number']}. Tesis.",
+                    is_active=True, sap_plant_code=f"SAP-{pspec['sequence_number']:04d}",
                 )
-                chief_first, chief_last = _take_name(name_pool)
-                chief = Chief(
-                    employee_number=f"SEF-{sequence_number:02d}-{chief_idx:02d}",
-                    first_name=chief_first, last_name=chief_last,
-                    plant_id=plant.id, hire_date=chief_hire, is_active=True,
-                    sap_personnel_number=f"SAP-S-{sequence_number:02d}{chief_idx:02d}",
-                )
-                db.add(chief)
+                db.add(plant)
                 db.flush()
-                ref.chiefs.append(chief)
-                plant_chiefs.append(chief)
+                ref.plants.append(plant)
+                zone_plants.append(plant)
+            zones.append((chief, zone_plants))
 
-            chief_assignment_plan: list[Chief] = []
-            for chief, size in zip(plant_chiefs, bucket_sizes):
-                chief_assignment_plan.extend([chief] * size)
-            rng.shuffle(chief_assignment_plan)
+    ref.plants.sort(key=lambda p: p.sequence_number)
 
-            for foreman_idx, chief_for_foreman in enumerate(chief_assignment_plan, start=1):
-                hire_earliest = period_start - timedelta(days=365 * 3)
-                hire_latest = period_end - timedelta(days=1)
-                hire_date = _random_date(rng, hire_earliest, hire_latest)
+    # Her bölge için her vardiyada bir formen: formenin vardiyası tüm görev süresi boyunca
+    # sabittir, sorumlu olduğu tesisler ise bölgenin TÜM tesisleridir.
+    foreman_idx_by_shift: dict[str, int] = {}
+    for shift in ref.shifts:
+        for chief, zone_plants in zones:
+            hire_earliest = period_start - timedelta(days=365 * 3)
+            hire_latest = period_end - timedelta(days=1)
+            hire_date = _random_date(rng, hire_earliest, hire_latest)
 
-                is_terminated = rng.random() < 0.04
-                termination_date = None
-                is_active = True
-                if is_terminated:
-                    term_earliest = max(hire_date, period_start) + timedelta(days=30)
-                    if term_earliest < period_end:
-                        termination_date = _random_date(rng, term_earliest, period_end)
-                        is_active = termination_date < period_end
+            is_terminated = rng.random() < 0.04
+            termination_date = None
+            is_active = True
+            if is_terminated:
+                term_earliest = max(hire_date, period_start) + timedelta(days=30)
+                if term_earliest < period_end:
+                    termination_date = _random_date(rng, term_earliest, period_end)
+                    is_active = termination_date < period_end
 
-                foreman_first, foreman_last = _take_name(name_pool)
-                foreman = Foreman(
-                    employee_number=f"SCL-{sequence_number:02d}-{foreman_idx:03d}",
-                    first_name=foreman_first, last_name=foreman_last,
-                    hire_date=hire_date, termination_date=termination_date, is_active=is_active,
-                    sap_personnel_number=f"SAP-P-{sequence_number:02d}{foreman_idx:03d}",
-                )
-                db.add(foreman)
-                db.flush()
-                ref.foremen.append(foreman)
+            foreman_idx = foreman_idx_by_shift.get(shift.code, 0) + 1
+            foreman_idx_by_shift[shift.code] = foreman_idx
 
-                shift = rng.choice(ref.shifts)
-                assignment_start = hire_date
-                changes_mid_period = rng.random() < 0.15 and not is_terminated
+            foreman_first, foreman_last = _take_name(name_pool)
+            foreman = Foreman(
+                employee_number=f"SCL-{shift.code}-{foreman_idx:03d}",
+                first_name=foreman_first, last_name=foreman_last,
+                hire_date=hire_date, termination_date=termination_date, is_active=is_active,
+                sap_personnel_number=f"SAP-P-{shift.code}{foreman_idx:03d}",
+            )
+            db.add(foreman)
+            db.flush()
+            ref.foremen.append(foreman)
 
-                if changes_mid_period:
-                    change_earliest = max(assignment_start, period_start) + timedelta(days=30)
-                    if change_earliest < period_end:
-                        change_date = _random_date(rng, change_earliest, period_end)
-                        first = ForemanAssignment(
-                            foreman_id=foreman.id, plant_id=plant.id, chief_id=chief_for_foreman.id,
-                            shift_id=shift.id,
-                            start_date=assignment_start, end_date=change_date - timedelta(days=1), is_active=False,
-                        )
-                        db.add(first)
-                        ref.assignments.append(first)
-
-                        new_shift = rng.choice(ref.shifts)
-                        second = ForemanAssignment(
-                            foreman_id=foreman.id, plant_id=plant.id, chief_id=chief_for_foreman.id,
-                            shift_id=new_shift.id,
-                            start_date=change_date, end_date=termination_date, is_active=is_active,
-                        )
-                        db.add(second)
-                        ref.assignments.append(second)
-                        continue
-
+            for plant in zone_plants:
                 assignment = ForemanAssignment(
-                    foreman_id=foreman.id, plant_id=plant.id, chief_id=chief_for_foreman.id,
+                    foreman_id=foreman.id, plant_id=plant.id, chief_id=chief.id,
                     shift_id=shift.id,
-                    start_date=assignment_start, end_date=termination_date, is_active=is_active,
+                    start_date=hire_date, end_date=termination_date, is_active=is_active,
                 )
                 db.add(assignment)
                 ref.assignments.append(assignment)
@@ -368,33 +366,44 @@ def regenerate_personnel_identities(db: Session, rng: random.Random) -> tuple[in
     plants = {p.id: p for p in db.scalars(select(Plant))}
     name_pool = _build_unique_name_pool(rng)
 
+    plants_by_chief: dict = {}
+    for p in plants.values():
+        plants_by_chief.setdefault(p.chief_id, []).append(p)
+
     chiefs = list(db.scalars(select(Chief)))
-    chiefs.sort(key=lambda c: (plants[c.plant_id].sequence_number, c.employee_number))
+    chiefs.sort(
+        key=lambda c: (
+            min((p.sequence_number for p in plants_by_chief.get(c.id, [])), default=0),
+            c.employee_number,
+        )
+    )
 
-    plant_by_foreman: dict = {}
+    shifts = {s.id: s for s in db.scalars(select(Shift))}
+    shift_code_by_foreman: dict = {}
+    primary_seq_by_foreman: dict = {}
     for assignment in db.scalars(select(ForemanAssignment).order_by(ForemanAssignment.start_date)):
-        plant_by_foreman.setdefault(assignment.foreman_id, assignment.plant_id)
+        shift_code_by_foreman.setdefault(assignment.foreman_id, shifts[assignment.shift_id].code)
+        seq = plants[assignment.plant_id].sequence_number
+        primary_seq_by_foreman[assignment.foreman_id] = min(
+            seq, primary_seq_by_foreman.get(assignment.foreman_id, seq)
+        )
 
-    foremen = [f for f in db.scalars(select(Foreman)) if f.id in plant_by_foreman]
-    foremen.sort(key=lambda f: (plants[plant_by_foreman[f.id]].sequence_number, f.employee_number))
+    foremen = [f for f in db.scalars(select(Foreman)) if f.id in shift_code_by_foreman]
+    foremen.sort(key=lambda f: (shift_code_by_foreman[f.id], primary_seq_by_foreman[f.id], f.employee_number))
 
-    chief_idx_by_plant: dict[int, int] = {}
-    for chief in chiefs:
-        seq = plants[chief.plant_id].sequence_number
-        idx = chief_idx_by_plant.get(seq, 0) + 1
-        chief_idx_by_plant[seq] = idx
+    for zone_idx, chief in enumerate(chiefs, start=1):
         chief.first_name, chief.last_name = _take_name(name_pool)
-        chief.employee_number = f"SEF-{seq:02d}-{idx:02d}"
-        chief.sap_personnel_number = f"SAP-S-{seq:02d}{idx:02d}"
+        chief.employee_number = f"SEF-{zone_idx:03d}"
+        chief.sap_personnel_number = f"SAP-S-{zone_idx:03d}"
 
-    foreman_idx_by_plant: dict[int, int] = {}
+    foreman_idx_by_shift: dict[str, int] = {}
     for foreman in foremen:
-        seq = plants[plant_by_foreman[foreman.id]].sequence_number
-        idx = foreman_idx_by_plant.get(seq, 0) + 1
-        foreman_idx_by_plant[seq] = idx
+        shift_code = shift_code_by_foreman[foreman.id]
+        idx = foreman_idx_by_shift.get(shift_code, 0) + 1
+        foreman_idx_by_shift[shift_code] = idx
         foreman.first_name, foreman.last_name = _take_name(name_pool)
-        foreman.employee_number = f"SCL-{seq:02d}-{idx:03d}"
-        foreman.sap_personnel_number = f"SAP-P-{seq:02d}{idx:03d}"
+        foreman.employee_number = f"SCL-{shift_code}-{idx:03d}"
+        foreman.sap_personnel_number = f"SAP-P-{shift_code}{idx:03d}"
 
     db.commit()
     return len(chiefs), len(foremen)

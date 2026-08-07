@@ -28,11 +28,6 @@ export function KpiAnalysisPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>KPI Analizi</h1>
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>Her KPI için tesis, vardiya ve formen bazlı derinlemesine analiz.</p>
-      </div>
-
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
       <div className="flex flex-wrap gap-2">

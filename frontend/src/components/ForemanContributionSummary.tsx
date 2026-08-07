@@ -104,7 +104,7 @@ export function ForemanContributionSummary({ foremanId }: { foremanId: string })
   if (s.total_contributions === 0) {
     return (
       <div className="rounded-lg px-4 py-3" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <p className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>Katkı ve İyileştirme Çalışmaları</p>
+        <p className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>Katkılar</p>
         <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
           Bu formen için henüz onaylanmış bir katkı çalışması bulunmuyor.
         </p>
@@ -134,7 +134,7 @@ export function ForemanContributionSummary({ foremanId }: { foremanId: string })
       >
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
-            Katkı ve İyileştirme Çalışmaları
+            Katkılar
           </span>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>{chips.join(" · ")}</span>
         </div>

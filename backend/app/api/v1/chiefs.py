@@ -32,10 +32,10 @@ def _chiefs_in_scope(db: Session, filters: Filters, search: str | None, is_activ
     if filters.chief_ids:
         query = query.where(Chief.id.in_(filters.chief_ids))
     if filters.plant_ids:
-        query = query.where(Chief.plant_id.in_(filters.plant_ids))
+        query = query.where(Chief.id.in_(select(Plant.chief_id).where(Plant.id.in_(filters.plant_ids))))
     if filters.factory_ids:
         query = query.where(
-            Chief.plant_id.in_(select(Plant.id).where(Plant.factory_id.in_(filters.factory_ids)))
+            Chief.id.in_(select(Plant.chief_id).where(Plant.factory_id.in_(filters.factory_ids)))
         )
 
     query = query.where(
@@ -68,15 +68,17 @@ def list_chiefs(
     chiefs = _chiefs_in_scope(db, filters, search, is_active)
 
     teams_by_chief = {t.chief_id: t for t in analytics.chief_team_scores(db, filters)}
-    plants_by_id = {p.id: p for p in db.scalars(select(Plant))}
     factories_by_id = {f.id: f for f in db.scalars(select(Factory))}
+    plants_by_chief: dict = {}
+    for p in db.scalars(select(Plant)):
+        plants_by_chief.setdefault(p.chief_id, []).append(p)
 
     full_items = []
     for c in chiefs:
         team = teams_by_chief.get(c.id)
         score = team.total_score if team else 0.0
-        plant = plants_by_id.get(c.plant_id)
-        factory = factories_by_id.get(plant.factory_id) if plant else None
+        chief_plants = sorted(plants_by_chief.get(c.id, []), key=lambda p: p.sequence_number)
+        factory = factories_by_id.get(chief_plants[0].factory_id) if chief_plants else None
         level = resolve_performance_level(score, levels)
         full_items.append(
             {
@@ -84,7 +86,7 @@ def list_chiefs(
                 "employee_number": c.employee_number,
                 "full_name": f"{c.first_name} {c.last_name}",
                 "is_active": c.is_active,
-                "plant": {"id": str(plant.id), "name": plant.name} if plant else None,
+                "plants": [{"id": str(p.id), "name": p.name} for p in chief_plants],
                 "factory": {"id": str(factory.id), "code": factory.code, "name": factory.name} if factory else None,
                 "foreman_count": team.foreman_count if team else 0,
                 "total_score": round(score, 2),
@@ -93,7 +95,7 @@ def list_chiefs(
                 "_sort": {
                     "name": (turkish_sort_key(c.first_name), turkish_sort_key(c.last_name)),
                     "employee_number": c.employee_number,
-                    "plant": plant.sequence_number if plant else -1,
+                    "plant": chief_plants[0].sequence_number if chief_plants else -1,
                     "factory": turkish_sort_key(factory.code) if factory else (),
                     "foreman_count": team.foreman_count if team else 0,
                     "score": score,
@@ -130,8 +132,10 @@ def get_chief(
 ) -> dict:
     chief = _get_chief_or_404(db, chief_id)
     levels = get_performance_levels(db)
-    plant = db.get(Plant, chief.plant_id)
-    factory = db.get(Factory, plant.factory_id) if plant else None
+    chief_plants = sorted(
+        db.scalars(select(Plant).where(Plant.chief_id == chief.id)), key=lambda p: p.sequence_number
+    )
+    factory = db.get(Factory, chief_plants[0].factory_id) if chief_plants else None
 
     ranking_filters = Filters(date_from=filters.date_from, date_to=filters.date_to, shift_ids=filters.shift_ids, kpi_ids=filters.kpi_ids)
     all_teams = analytics.chief_team_scores(db, ranking_filters)
@@ -141,9 +145,11 @@ def get_chief(
     ranked = sorted(all_teams, key=lambda t: t.total_score, reverse=True)
     company_rank = next((i + 1 for i, t in enumerate(ranked) if t.chief_id == chief_id), None)
 
-    plant_chief_ids = {c.id for c in db.scalars(select(Chief).where(Chief.plant_id == chief.plant_id))}
-    plant_ranked = [t for t in ranked if t.chief_id in plant_chief_ids]
-    plant_rank = next((i + 1 for i, t in enumerate(plant_ranked) if t.chief_id == chief_id), None)
+    factory_chief_ids = (
+        {p.chief_id for p in db.scalars(select(Plant).where(Plant.factory_id == factory.id))} if factory else set()
+    )
+    factory_ranked = [t for t in ranked if t.chief_id in factory_chief_ids]
+    factory_rank = next((i + 1 for i, t in enumerate(factory_ranked) if t.chief_id == chief_id), None)
 
     return {
         "id": str(chief.id),
@@ -151,7 +157,7 @@ def get_chief(
         "full_name": f"{chief.first_name} {chief.last_name}",
         "hire_date": chief.hire_date.isoformat(),
         "is_active": chief.is_active,
-        "plant": {"id": str(plant.id), "name": plant.name} if plant else None,
+        "plants": [{"id": str(p.id), "name": p.name} for p in chief_plants],
         "factory": {"id": str(factory.id), "code": factory.code, "name": factory.name} if factory else None,
         "foreman_count": my_team.foreman_count if my_team else 0,
         "total_score": round(score, 2),
@@ -159,8 +165,8 @@ def get_chief(
         "level": level_to_dict(resolve_performance_level(score, levels)),
         "company_rank": company_rank,
         "company_total": len(ranked),
-        "plant_rank": plant_rank,
-        "plant_total": len(plant_ranked),
+        "factory_rank": factory_rank,
+        "factory_total": len(factory_ranked),
     }
 
 

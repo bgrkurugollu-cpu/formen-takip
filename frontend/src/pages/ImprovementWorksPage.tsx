@@ -9,6 +9,7 @@ import { ContributionWorkTable, type ContributionSortField } from "../components
 import { ContributionWorkForm } from "../components/ContributionWorkForm";
 import { useContributionWorks, useFilterOptions, useForemen } from "../api/hooks";
 import { useContributionFilters } from "../hooks/useContributionFilters";
+import { DATE_PRESETS } from "../hooks/useFilters";
 import type { ContributionWorkType, FinancialGainStatus, ImpactLevel } from "../api/types";
 import { FINANCIAL_STATUS_FILTER_LABELS, IMPACT_LEVEL_LABELS, WORK_TYPE_LABELS } from "../lib/contributionTheme";
 import { searchInputClass, searchInputStyle } from "../lib/tableStyles";
@@ -63,7 +64,7 @@ export function ImprovementWorksPage() {
 
   const activeFilterCount = [
     filters.dateFrom, filters.dateTo, filters.plantIds[0], filters.factoryIds[0], filters.foremanIds[0],
-    filters.workType, filters.status, filters.impactLevel, filters.financialGainStatus,
+    filters.workType, filters.impactLevel, filters.financialGainStatus,
   ].filter(Boolean).length;
 
   const setView2 = (v: ViewMode) => {
@@ -73,25 +74,24 @@ export function ImprovementWorksPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Katkı ve İyileştirme Çalışmaları</h1>
-          <p className="max-w-2xl text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Formenlerin KPI sonuçları dışında gerçekleştirdiği SMED, Kaizen, problem çözme, maliyet azaltma ve benzeri
-            iyileştirme çalışmalarının kaydı.
-          </p>
-        </div>
-        <button
-          onClick={() => setFormOpen(true)}
-          className="flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-[13px] font-medium text-white"
-          style={{ background: "var(--accent)" }}
-        >
-          <Plus size={14} strokeWidth={2} />
-          Yeni Çalışma Ekle
-        </button>
-      </div>
+      <ContributionSummaryStats params={{ ...asQueryParams, search: search || undefined }} />
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg p-3" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <select
+          className={searchInputClass}
+          style={{ ...searchInputStyle, maxWidth: "10.5rem" }}
+          onChange={(e) => {
+            const preset = DATE_PRESETS.find((p) => p.label === e.target.value);
+            if (preset) {
+              const [from, to] = preset.getRange();
+              setFilters({ dateFrom: from, dateTo: to });
+            }
+          }}
+          defaultValue=""
+        >
+          <option value="" disabled>Hazır tarih aralığı</option>
+          {DATE_PRESETS.map((p) => <option key={p.label} value={p.label}>{p.label}</option>)}
+        </select>
         <input type="date" value={filters.dateFrom} onChange={(e) => setFilters({ dateFrom: e.target.value })} className={searchInputClass} style={{ ...searchInputStyle, maxWidth: "9.5rem" }} />
         <span style={{ color: "var(--text-muted)" }}>–</span>
         <input type="date" value={filters.dateTo} onChange={(e) => setFilters({ dateTo: e.target.value })} className={searchInputClass} style={{ ...searchInputStyle, maxWidth: "9.5rem" }} />
@@ -147,16 +147,6 @@ export function ImprovementWorksPage() {
         </select>
 
         <select
-          value={filters.status}
-          onChange={(e) => setFilters({ status: e.target.value as "draft" | "published" })}
-          className={searchInputClass} style={{ ...searchInputStyle, maxWidth: "9rem" }}
-        >
-          <option value="">Tüm durumlar</option>
-          <option value="draft">Taslak</option>
-          <option value="published">Yayımlandı</option>
-        </select>
-
-        <select
           value={filters.impactLevel}
           onChange={(e) => setFilters({ impactLevel: e.target.value as ImpactLevel })}
           className={searchInputClass} style={{ ...searchInputStyle, maxWidth: "9.5rem" }}
@@ -185,7 +175,16 @@ export function ImprovementWorksPage() {
         )}
       </div>
 
-      <ContributionSummaryStats params={{ ...asQueryParams, search: search || undefined }} />
+      <div className="flex items-center justify-end">
+        <button
+          onClick={() => setFormOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-[13px] font-medium text-white"
+          style={{ background: "var(--accent)" }}
+        >
+          <Plus size={14} strokeWidth={2} />
+          Yeni Çalışma Ekle
+        </button>
+      </div>
 
       <div className="flex items-center justify-between">
         <input

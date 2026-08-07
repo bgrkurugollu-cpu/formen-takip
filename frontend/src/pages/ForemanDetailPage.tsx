@@ -88,16 +88,12 @@ export function ForemanDetailPage() {
         <div>
           <button
             onClick={() => navigate("/foremen")}
-            className="mb-1.5 flex items-center gap-1 text-xs font-medium hover:underline"
+            className="flex items-center gap-1 text-xs font-medium hover:underline"
             style={{ color: "var(--accent)" }}
           >
             <ChevronLeft size={13} strokeWidth={2} />
             Formenler
           </button>
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{f.full_name}</h1>
-          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            {f.employee_number} · {f.plant?.name} · {f.chief?.name} · {f.shift?.name}
-          </p>
         </div>
         <div className="text-right">
           <div className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{f.total_score.toFixed(1)}</div>
