@@ -1,15 +1,17 @@
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { KeyboardEvent } from "react";
 import { resolveChartInk } from "../../lib/chartColors";
 import { useTheme } from "../../context/ThemeContext";
 import { EmptyState } from "../StateViews";
 
 interface Item {
+  id?: string;
   name: string;
   score: number;
   color: string;
 }
 
-export function RankingBarChart({ items }: { items: Item[] }) {
+export function RankingBarChart({ items, onSelect }: { items: Item[]; onSelect?: (item: Item) => void }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const ink = resolveChartInk(isDark);
@@ -17,6 +19,10 @@ export function RankingBarChart({ items }: { items: Item[] }) {
   if (items.length === 0) return <EmptyState />;
 
   const height = Math.max(120, items.length * 32);
+
+  const handleSelect = (entry: { payload?: Item }) => {
+    if (onSelect && entry.payload?.id) onSelect(entry.payload);
+  };
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -41,7 +47,22 @@ export function RankingBarChart({ items }: { items: Item[] }) {
           labelStyle={{ color: ink.primary }}
           itemStyle={{ color: ink.primary }}
         />
-        <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={18}>
+        <Bar
+          dataKey="score"
+          radius={[0, 4, 4, 0]}
+          barSize={18}
+          cursor={onSelect ? "pointer" : undefined}
+          tabIndex={onSelect ? 0 : undefined}
+          role={onSelect ? "button" : undefined}
+          onClick={handleSelect}
+          onKeyDown={(entry: { payload?: Item }, _index: number, e: KeyboardEvent) => {
+            if (!onSelect) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleSelect(entry);
+            }
+          }}
+        >
           {items.map((item, idx) => (
             <Cell key={idx} fill={item.color} />
           ))}

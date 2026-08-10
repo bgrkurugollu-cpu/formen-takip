@@ -115,8 +115,8 @@ def derive_raw_performance_records(
     foremen = {f.id: f for f in db.scalars(select(Foreman))}
     products = {p.id: p for p in db.scalars(select(Product))}
 
-    working_pairs = {
-        (row.foreman_id, row.work_date)
+    working_triples = {
+        (row.foreman_id, row.work_date, row.plant_id)
         for row in db.scalars(
             select(ForemanWorkCalendar).where(
                 ForemanWorkCalendar.is_working.is_(True),
@@ -133,8 +133,10 @@ def derive_raw_performance_records(
     )
 
     for record in db.scalars(stmt):
-        # Formen çalışma kaydı bulunmadığında üretim formene bağlanmaz.
-        if (record.foreman_id, record.production_date) not in working_pairs:
+        # Formen tam bu tesiste bu gün çalışma kaydı bulunmadığında üretim formene bağlanmaz —
+        # takvim tesise özeldir (bkz. ForemanWorkCalendar natural key), formen aynı gün başka
+        # bir tesiste izinli/devamsız olabilirken burada çalışıyor olabilir.
+        if (record.foreman_id, record.production_date, record.plant_id) not in working_triples:
             continue
 
         plant = plants.get(record.plant_id)

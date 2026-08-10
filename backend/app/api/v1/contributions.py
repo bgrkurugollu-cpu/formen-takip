@@ -333,15 +333,46 @@ def list_contribution_works(
         work_type, status_filter, impact_level, financial_gain_status, search,
     )
 
-    all_works = list(db.scalars(query))
-    all_works.sort(key=_sort_key_fn(db, all_works, sort_by), reverse=sort_dir == "desc")
-    total = len(all_works)
-    start = (page.page - 1) * page.page_size
-    page_works = all_works[start : start + page.page_size]
+    if sort_by in ("title", "type", "foreman", "gain"):
+        # Bu dört sıralama SQL'e taşınamaz: title/type/foreman Türkçe'ye özel bir harf sırası
+        # kullanıyor (`turkish_sort_key` — Postgres'in varsayılan collation'ıyla BİREBİR
+        # eşleşmiyor, ör. ç/ğ/ı/ö/ş/ü sırası), gain ise çok dallı bir iş kuralından
+        # (`resolve_highlighted_gain`: manuel referans → doğrulanmış tutar → tahmini tutar →
+        # zaman kazancı) doğuyor. Performans için sessizce yanlış bir sıra üretmektense burada
+        # hâlâ bellekte (tüm eşleşen satırlar çekilip) sıralanır.
+        all_works = list(db.scalars(query))
+        all_works.sort(key=_sort_key_fn(db, all_works, sort_by), reverse=sort_dir == "desc")
+        total = len(all_works)
+        start = (page.page - 1) * page.page_size
+        page_works = all_works[start : start + page.page_size]
+    else:
+        total = db.scalar(select(func.count()).select_from(query.subquery()))
+
+        if sort_by == "plant":
+            query = query.outerjoin(Plant, Plant.id == ContributionWork.plant_id)
+            sort_col = func.coalesce(Plant.sequence_number, -1)
+            order_expr = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
+        elif sort_by == "status":
+            order_expr = ContributionWork.status.desc() if sort_dir == "desc" else ContributionWork.status.asc()
+        else:  # "date" (varsayılan) — eski Python anahtarı (work_date or date.min) ile eşleşsin
+            # diye NULL'lar en küçük değermiş gibi davranır: ASC'de en başta, DESC'te en sonda.
+            order_expr = (
+                ContributionWork.work_date.desc().nulls_last()
+                if sort_dir == "desc" else ContributionWork.work_date.asc().nulls_first()
+            )
+
+        # `id` ikincil sıralama anahtarı: birincil alan eşit olan satırlarda tek başına sıralama,
+        # sayfa 1/sayfa 2 ayrı SQL sorguları olduğundan tutarsız sıra üretip bir satırı iki
+        # sayfada birden gösterebilir ya da hiç göstermeyebilir.
+        query = (
+            query.order_by(order_expr, ContributionWork.id)
+            .offset((page.page - 1) * page.page_size).limit(page.page_size)
+        )
+        page_works = list(db.scalars(query))
 
     return {
         "items": [_to_dict(db, w) for w in page_works],
-        "total": total, "page": page.page, "page_size": page.page_size,
+        "total": total or 0, "page": page.page, "page_size": page.page_size,
     }
 
 
@@ -391,8 +422,9 @@ def contribution_summary(
         by_type[label] = by_type.get(label, 0) + 1
 
     foreman_counts: dict[UUID, int] = {}
-    for w in works:
-        for row in db.scalars(select(ContributionWorkForeman).where(ContributionWorkForeman.work_id == w.id)):
+    work_ids = [w.id for w in works]
+    if work_ids:
+        for row in db.scalars(select(ContributionWorkForeman).where(ContributionWorkForeman.work_id.in_(work_ids))):
             foreman_counts[row.foreman_id] = foreman_counts.get(row.foreman_id, 0) + 1
     foremen_by_id = {f.id: f for f in db.scalars(select(Foreman))}
     top_foremen = sorted(foreman_counts.items(), key=lambda kv: kv[1], reverse=True)[:10]

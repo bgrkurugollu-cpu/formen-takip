@@ -166,7 +166,11 @@ def rescore_all(db: Session, batch_size: int = BATCH_SIZE) -> dict:
                 calculated_at=bindparam("calculated_at"),
             )
         )
-        db.execute(upd, batch)
+        # `db.execute` üzerinden gidilirse SQLAlchemy 2.0 bunu "PK'ya göre ORM bulk UPDATE" sanıp
+        # batch sözlüklerinde literal "id" anahtarı arıyor (burada WHERE bindparam adı "sid") —
+        # ham Core bağlantısı üzerinden çalıştırmak bu ORM-DML otomatik algılamasını devre dışı
+        # bırakır, aynı (henüz commit edilmemiş) transaction'ı paylaşmaya devam eder.
+        db.connection().execute(upd, batch)
         db.commit()
         updated += len(batch)
         batch = []
@@ -181,7 +185,8 @@ def rescore_all(db: Session, batch_size: int = BATCH_SIZE) -> dict:
             score = compute_score_for_rule(
                 rule.calculation_type, rule.parameters,
                 actual=float(row.actual_value), target=float(row.target_value),
-                numerator=row.numerator_value, denominator=row.denominator_value,
+                numerator=float(row.numerator_value) if row.numerator_value is not None else None,
+                denominator=float(row.denominator_value) if row.denominator_value is not None else None,
                 min_score=float(kpi.min_score), max_score=float(kpi.max_score),
             )
         except KpiCalculationError:

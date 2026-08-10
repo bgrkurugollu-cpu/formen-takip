@@ -208,14 +208,20 @@ def list_anomalies(
         like = f"%{search}%"
         query = query.where(or_(Anomaly.title.ilike(like), Anomaly.description.ilike(like)))
 
-    all_anomalies = list(db.scalars(query.order_by(Anomaly.detected_at.desc())))
-    total = len(all_anomalies)
-    start = (page.page - 1) * page.page_size
-    page_items = all_anomalies[start : start + page.page_size]
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+
+    # `id` ikincil sıralama anahtarı olarak eklenir: `detected_at` eşit olan satırlarda tek
+    # başına DESC sıralama sayfa 1/sayfa 2 arasında (ayrı SQL sorguları olduğundan) tutarsız
+    # sıra üretebilir — aynı satır iki sayfada birden görünebilir ya da hiç görünmeyebilir.
+    query = (
+        query.order_by(Anomaly.detected_at.desc(), Anomaly.id)
+        .offset((page.page - 1) * page.page_size).limit(page.page_size)
+    )
+    page_items = list(db.scalars(query))
 
     return {
         "items": [_to_summary_dict(db, a) for a in page_items],
-        "total": total,
+        "total": total or 0,
         "page": page.page,
         "page_size": page.page_size,
     }

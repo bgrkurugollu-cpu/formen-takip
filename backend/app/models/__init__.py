@@ -1,9 +1,6 @@
-from app.models.action_plan import ActionPlan
 from app.models.anomaly import Anomaly, AnomalyAnalysis, AnomalyToolCall
 from app.models.contribution import ContributionGain, ContributionWork, ContributionWorkForeman
 from app.models.enums import (
-    ActionPlanPriority,
-    ActionPlanStatus,
     AggregationMethod,
     AnalysisMode,
     AnomalyAnalysisStatus,
@@ -46,9 +43,6 @@ from app.models.report import ReportExport
 from app.models.user import AuditLog, User
 
 __all__ = [
-    "ActionPlan",
-    "ActionPlanPriority",
-    "ActionPlanStatus",
     "AggregationMethod",
     "CalculationType",
     "DataQualityStatus",

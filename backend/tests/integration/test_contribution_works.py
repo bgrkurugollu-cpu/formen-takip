@@ -71,6 +71,44 @@ class TestContributionWorkList:
         body = resp.json()
         assert "items" in body and "total" in body
 
+    def test_sql_sortable_pages_do_not_overlap(self, client, auth_headers):
+        # Sıkı bir döngüde ardışık oluşturulan taslaklar `work_date`de (hepsi None) çakışır —
+        # ikincil `id` sıralama anahtarı olmadan sayfa 1/sayfa 2 aynı satırı ikisinde de
+        # gösterebilir ya da hiç göstermeyebilir (bkz. list_contribution_works SQL dalı).
+        created_ids = set()
+        for i in range(8):
+            resp = client.post(
+                "/api/v1/contribution-works", json={"title": f"Sayfalama testi #{i}"}, headers=auth_headers
+            )
+            created_ids.add(resp.json()["id"])
+
+        first = client.get(
+            "/api/v1/contribution-works", params={"sort_by": "date", "page": 1, "page_size": 4}, headers=auth_headers
+        ).json()
+        second = client.get(
+            "/api/v1/contribution-works", params={"sort_by": "date", "page": 2, "page_size": 4}, headers=auth_headers
+        ).json()
+        first_ids = {i["id"] for i in first["items"]}
+        second_ids = {i["id"] for i in second["items"]}
+        assert first_ids.isdisjoint(second_ids)
+
+        all_items = client.get(
+            "/api/v1/contribution-works", params={"search": "Sayfalama testi", "page_size": 200}, headers=auth_headers
+        ).json()
+        assert created_ids == {i["id"] for i in all_items["items"]}
+
+    def test_title_sort_still_works_via_python_path(self, client, auth_headers):
+        client.post("/api/v1/contribution-works", json={"title": "Öncelik Testi Z"}, headers=auth_headers)
+        client.post("/api/v1/contribution-works", json={"title": "Öncelik Testi A"}, headers=auth_headers)
+        resp = client.get(
+            "/api/v1/contribution-works",
+            params={"search": "Öncelik Testi", "sort_by": "title", "sort_dir": "asc", "page_size": 10},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert titles == sorted(titles)
+
 
 class TestContributionWorkCreate:
     def test_draft_requires_only_title(self, client, auth_headers):

@@ -56,7 +56,7 @@ export function LoginPage() {
             Üretim Performans Yönetim Sistemi
           </h1>
           <p className="mt-3 max-w-sm text-sm" style={{ color: "var(--sidebar-text)" }}>
-            50 tesis, 3 vardiya ve 5 temel performans göstergesi üzerinden formen
+            50 tesis, 2 vardiya ve 5 temel performans göstergesi üzerinden formen
             performansını tek merkezden izleyin.
           </p>
         </div>

@@ -10,15 +10,13 @@ import { GroupDetailPage } from "./pages/GroupDetailPage";
 import { ForemenPage } from "./pages/ForemenPage";
 import { ForemanDetailPage } from "./pages/ForemanDetailPage";
 import { KpiAnalysisPage } from "./pages/KpiAnalysisPage";
-import { ActionPlansPage } from "./pages/ActionPlansPage";
 import { ImprovementWorksPage } from "./pages/ImprovementWorksPage";
 import { ImprovementWorkDetailPage } from "./pages/ImprovementWorkDetailPage";
 import { AnomaliesPage } from "./pages/AnomaliesPage";
 import { AnomalyDetailPage } from "./pages/AnomalyDetailPage";
+import { ShiftAnalysisPage } from "./pages/ShiftAnalysisPage";
+import { ShiftDetailPage } from "./pages/ShiftDetailPage";
 import { ReportsPage } from "./pages/ReportsPage";
-import { DataQualityPage } from "./pages/DataQualityPage";
-import { IntegrationStatusPage } from "./pages/IntegrationStatusPage";
-import { AuditLogPage } from "./pages/AuditLogPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -45,15 +43,13 @@ function App() {
       <Route path="/foremen" element={<ProtectedRoute><ForemenPage /></ProtectedRoute>} />
       <Route path="/foremen/:foremanId" element={<ProtectedRoute><ForemanDetailPage /></ProtectedRoute>} />
       <Route path="/kpis" element={<ProtectedRoute><KpiAnalysisPage /></ProtectedRoute>} />
-      <Route path="/action-plans" element={<ProtectedRoute><ActionPlansPage /></ProtectedRoute>} />
       <Route path="/improvement-works" element={<ProtectedRoute><ImprovementWorksPage /></ProtectedRoute>} />
       <Route path="/improvement-works/:workId" element={<ProtectedRoute><ImprovementWorkDetailPage /></ProtectedRoute>} />
       <Route path="/anomalies" element={<ProtectedRoute><AnomaliesPage /></ProtectedRoute>} />
       <Route path="/anomalies/:anomalyId" element={<ProtectedRoute><AnomalyDetailPage /></ProtectedRoute>} />
+      <Route path="/shift-analysis" element={<ProtectedRoute><ShiftAnalysisPage /></ProtectedRoute>} />
+      <Route path="/shifts/:shiftId" element={<ProtectedRoute><ShiftDetailPage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-      <Route path="/data-quality" element={<ProtectedRoute><DataQualityPage /></ProtectedRoute>} />
-      <Route path="/integration-status" element={<ProtectedRoute><IntegrationStatusPage /></ProtectedRoute>} />
-      <Route path="/audit-log" element={<ProtectedRoute><AuditLogPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

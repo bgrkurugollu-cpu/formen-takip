@@ -54,17 +54,23 @@ export function useFilters() {
   const setFilters = useCallback(
     (partial: Partial<FilterState>) => {
       const next = { ...filters, ...partial };
-      const params = new URLSearchParams();
+      // Tabanı mevcut searchParams'tan alır: sayfaya özel ek query paramlarını (ör. seçili KPI)
+      // korumak için — sıfırdan kurulursa FilterBar'daki her değişiklik onları siler.
+      const params = new URLSearchParams(searchParams);
+      const setOrDelete = (key: string, value: string) => {
+        if (value) params.set(key, value);
+        else params.delete(key);
+      };
       params.set("date_from", next.dateFrom);
       params.set("date_to", next.dateTo);
-      if (next.plantIds.length) params.set("plant_ids", next.plantIds.join(","));
-      if (next.factoryIds.length) params.set("factory_ids", next.factoryIds.join(","));
-      if (next.chiefIds.length) params.set("chief_ids", next.chiefIds.join(","));
-      if (next.shiftIds.length) params.set("shift_ids", next.shiftIds.join(","));
-      if (next.kpiIds.length) params.set("kpi_ids", next.kpiIds.join(","));
+      setOrDelete("plant_ids", next.plantIds.join(","));
+      setOrDelete("factory_ids", next.factoryIds.join(","));
+      setOrDelete("chief_ids", next.chiefIds.join(","));
+      setOrDelete("shift_ids", next.shiftIds.join(","));
+      setOrDelete("kpi_ids", next.kpiIds.join(","));
       setSearchParams(params, { replace: true });
     },
-    [filters, setSearchParams]
+    [filters, searchParams, setSearchParams]
   );
 
   const clearFilters = useCallback(() => {

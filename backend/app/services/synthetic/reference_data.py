@@ -89,16 +89,21 @@ DEFAULT_KPI_SEED = [
     ),
     dict(
         code="PLANA_UYUM", name="Plana Uyum Oranı",
-        description="Gerçekleşen üretimin, güncel (revize) üretim planına göre mutlak sapması (plan altı ve plan üstü eşit ağırlıkta sapma sayılır).",
+        description="Gerçekleşen üretimin, güncel (revize) üretim planına göre yönlü sapması (planın üzerinde üretim ödüllendirilir, planın altında üretim daha güçlü cezalandırılır).",
         unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=True,
-        # Bu KPI'nın puanı planned/actual miktarlardan doğrudan hesaplanır (bkz. score_plan_compliance);
+        # Bu KPI'nın puanı planned/actual miktarlardan doğrudan hesaplanır (bkz. score_plan_achievement);
         # default_target_value/kpi_targets yalnızca "bu KPI bu kapsamda yapılandırılmış mı" kontrolü
         # için tutulur (spec rule 10/11), formüle girmez.
         default_target_value=100.0, min_valid_value=0, max_valid_value=300,
         min_score=0, max_score=_NO_CEILING_SENTINEL, weight=20, is_critical=True, display_order=5,
+        # v3 (asimetrik): plan altı hala cezalandırılır (daha güçlü), plan üstü artık ödüllendirilir
+        # (bkz. kpi_engine.py::score_plan_achievement) — v1/v2'nin simetrik modelinin yerini alır.
         rule_params={
-            "formula_type": "PIECEWISE_LINEAR_LOGARITHMIC",
-            "normal_deviation_limit": 5.00, "excess_deviation_coefficient": 10.00,
+            "formula_type": "ASYMMETRIC_PLAN_ACHIEVEMENT",
+            "target_score": 100, "positive_linear_limit": 5.0,
+            "positive_points_per_percentage_point": 1.0, "positive_log_coefficient": 5.0,
+            "negative_linear_limit": 5.0, "negative_points_per_percentage_point": 1.0,
+            "negative_log_coefficient": 10.0, "minimum_score": 0, "maximum_score": None,
         },
     ),
 ]
@@ -112,9 +117,8 @@ PERFORMANCE_LEVEL_SEED = [
 ]
 
 SHIFT_SEED = [
-    dict(code="V1", name="1. Vardiya", start="07:00", end="15:00", sequence=1),
-    dict(code="V2", name="2. Vardiya", start="15:00", end="23:00", sequence=2),
-    dict(code="V3", name="3. Vardiya", start="23:00", end="07:00", sequence=3),
+    dict(code="V1", name="1. Vardiya", start="07:00", end="19:00", sequence=1),
+    dict(code="V2", name="2. Vardiya", start="19:00", end="07:00", sequence=2),
 ]
 
 
@@ -247,8 +251,8 @@ def seed_reference_data(
     name_pool = _build_unique_name_pool(rng)
 
     # Bir şef artık tek bir tesise değil, aynı fabrika içindeki tesislerden oluşan sabit bir
-    # bölgeye ("zone") sorumludur. Bu bölge aynı zamanda o bölgedeki her formenin (her
-    # vardiyada bir tane) sorumlu olduğu tesis kümesidir — böylece bir formenin tüm
+    # bölgeye ("zone") sorumludur. Bu bölge aynı zamanda o bölgedeki her formenin (her vardiya
+    # çıpası için bir tane) sorumlu olduğu tesis kümesidir — böylece bir formenin tüm
     # ForemanAssignment satırları her zaman AYNI (tek) şefi taşır; "bir formen birden fazla
     # şefe bağlı kalamaz" kuralı üretim anında garanti edilir, DB'de de
     # (plant_id, chief_id) kompozit FK'siyle desteklenir.
@@ -301,8 +305,11 @@ def seed_reference_data(
 
     ref.plants.sort(key=lambda p: p.sequence_number)
 
-    # Her bölge için her vardiyada bir formen: formenin vardiyası tüm görev süresi boyunca
-    # sabittir, sorumlu olduğu tesisler ise bölgenin TÜM tesisleridir.
+    # Her bölge için 2 formen (biri V1, diğeri V2 "çıpalı") üretilir; sorumlu oldukları
+    # tesisler bölgenin TÜM tesisleridir. `shift_id` artık formenin KALICI vardiyası değil,
+    # tenure'ının ilk haftasında hangi vardiyada başladığını gösteren bir çıpadır — gerçek
+    # günlük vardiya haftalık olarak dönüşümlüdür (bkz. app/services/shift_rotation.py,
+    # kullanımı için production_generator.py).
     foreman_idx_by_shift: dict[str, int] = {}
     for shift in ref.shifts:
         for chief, zone_plants in zones:
@@ -379,6 +386,9 @@ def regenerate_personnel_identities(db: Session, rng: random.Random) -> tuple[in
     )
 
     shifts = {s.id: s for s in db.scalars(select(Shift))}
+    # `shift_code_by_foreman` formenin ilk atamasındaki vardiya ÇIPASINI taşır (bkz.
+    # shift_rotation.py) — formenin bugünkü gerçek vardiyası değil, sadece kimlik/isimlendirme
+    # amaçlı stabil bir gruplama anahtarıdır.
     shift_code_by_foreman: dict = {}
     primary_seq_by_foreman: dict = {}
     for assignment in db.scalars(select(ForemanAssignment).order_by(ForemanAssignment.start_date)):

@@ -119,16 +119,9 @@ tablolarını oluşturamaz, güncelleyemez veya silemez.
 
 Veri kalitesi durumları (`DataQualityStatus`): `complete`, `missing`,
 `invalid`, `suspicious`, `duplicate`, `needs_source_correction`,
-`pending_resync`, `reprocessed`.
-
-### Manuel yeniden senkronizasyon
-
-`POST /api/v1/integration/resync` (Entegrasyon Durumu ekranından tetiklenir),
-mevcut sağlayıcıyı (bu ortamda sentetik) belirtilen tarih aralığı için
-yeniden çalıştırır — kullanıcının performans verisi girmesi anlamına GELMEZ.
-Aralık en fazla **31 gün** (`MAX_RESYNC_DAYS`) ile sınırlıdır. Zaten yüklenmiş
-bir dönemi yeniden senkronize etmek, tüm satırların doğal anahtar
-çakışmasıyla atlanması nedeniyle idempotent biçimde no-op'tur.
+`pending_resync`, `reprocessed`. Bu durumlar `data_quality_issues`
+tablosuna yazılmaya devam eder; yalnızca ayrı bir "Veri Kalitesi" API/ekranı
+üzerinden görüntülenmezler (aşağıdaki not).
 
 ## Üretim Verisi Katmanı
 
@@ -258,14 +251,11 @@ OpenAPI dokümantasyonu: `http://localhost:8000/docs`.
 | `chiefs` | `GET /chiefs`, `/{id}`, `/{id}/foremen`, `/{id}/kpis`, `/{id}/trend` |
 | `foremen` | `GET /foremen`, `/{id}`, `/{id}/kpis`, `/{id}/kpis/{kpi_id}/calculation-detail`, `/{id}/trend`, `/{id}/assignment-history`, `/{id}/contribution-summary` |
 | `kpis` | `GET /kpis`, `/{id}`, `/{id}/analysis` |
-| `data_quality` | `GET /issues`, `/summary` |
-| `integration` | `GET /runs`, `/runs/{id}`, `POST /resync` |
-| `action_plans` | `GET /`, `POST /`, `GET /{id}`, `PATCH /{id}` |
 | `contributions` | `GET /contribution-works`, `/summary`, `/{id}`, `/{id}/pdf`, `POST /`, `PATCH /{id}`, `DELETE /{id}` — bkz. [Katkılar](#katkılar) |
 | `anomalies` | `GET /anomalies`, `/summary`, `/{id}`, `POST /{id}/analyze`, `/{id}/reanalyze`, `GET /{id}/analysis`, `PATCH /{id}/status` — bkz. [Tespitler Modülü](#tespitler-modülü-anomali-tespiti--yapay-zekâ-analizi) |
 | `analyses` | `GET /analyses/{id}`, `GET /analyses/{id}/tool-calls` — Aşama 2 tool calling geçmişi |
+| `shift_analysis` | `GET /shift-analysis/cards`, `/detail` — aynı tesis/KPI'da bir ayın vardiya rotasyonuna göre iki formen arasındaki belirgin performans farklarını yüzeye çıkarır |
 | `reports` | `POST /generate`, `GET /`, `GET /{id}/download` |
-| `audit_logs` | `GET /` |
 
 Ortak filtreleme: `common_filters` bağımlılığı (`app/schemas/common.py`)
 `date_from`, `date_to`, virgülle ayrılmış `plant_ids` / `factory_ids` /
@@ -274,15 +264,15 @@ nesnesine çözer ve `analytics._apply_filters` üzerinden tüm sorgulara
 uygulanır. `factory_ids`, `PerformanceRecord`'ın `factory_id` taşımaması
 nedeniyle bir `Plant.factory_id` alt sorgusu üzerinden çözülür.
 
-Aksiyon planları performans kaydını hiçbir şekilde değiştirmez — tamamen
-bağımsız bir takip tablosudur. Raporlama modülü de mevcut
-`analytics.py` sorgularını yeniden kullanır; üretilen dosya içeriği demo
-ölçeğinde ayrı bir obje deposu gerektirmediği için `report_exports`
-tablosunda (`LargeBinary`) saklanır.
+Raporlama modülü mevcut `analytics.py` sorgularını yeniden kullanır;
+üretilen dosya içeriği demo ölçeğinde ayrı bir obje deposu gerektirmediği
+için `report_exports` tablosunda (`LargeBinary`) saklanır.
 
-Denetlenebilir eylemler (giriş/çıkış, aksiyon planı CRUD, rapor
-oluşturma/indirme, resync tetikleme) `app/services/audit.py::record_audit()`
-üzerinden tek noktadan `audit_logs` tablosuna yazılır.
+Denetlenebilir eylemler (giriş/çıkış, katkı çalışması CRUD, tespit durumu/
+analiz güncelleme, rapor oluşturma/indirme) `app/services/audit.py::record_audit()`
+üzerinden tek noktadan `audit_logs` tablosuna yazılır — bu tabloyu
+görüntüleyen ayrı bir API/ekran bulunmaz, yalnızca dahili iz kaydı olarak
+tutulur.
 
 ## Tespitler Modülü (Anomali Tespiti + Yapay Zekâ Analizi)
 
@@ -564,13 +554,10 @@ doğrulaması olmayan istekler `/login`'e yönlendirilir (`ProtectedRoute`).
 | Şef Grupları / Grup Detayı | `/groups`, `/groups/:chiefId` |
 | Formenler / Formen Detayı | `/foremen`, `/foremen/:foremanId` |
 | KPI Analizi | `/kpis` |
-| Aksiyon Planları | `/action-plans` |
 | Katkılar / Detay | `/improvement-works`, `/improvement-works/:workId` |
 | Tespitler / Tespit Detayı | `/anomalies`, `/anomalies/:anomalyId` |
+| Vardiya Analizi / Detay | `/shift-analysis`, `/shifts/:shiftId` |
 | Raporlar | `/reports` |
-| Veri Kalitesi | `/data-quality` |
-| Entegrasyon Durumu | `/integration-status` |
-| Denetim Kayıtları | `/audit-log` |
 
 Dizin yapısı: `api/` (axios client + TanStack Query hook'ları + tip
 tanımları), `components/` (paylaşılan bileşenler ve `charts/` altında
@@ -609,8 +596,9 @@ Ana tablo grupları (SQLAlchemy 2.0 `Mapped`/`mapped_column`, `app/models/`):
   (kapsam bazlı), `performance_level_rules`
 - **Performans (salt okunur, üretim verisinden türetilir):**
   `performance_records`, `performance_scores`
-- **Entegrasyon:** `integration_runs`, `data_quality_issues`
-- **Aksiyon/rapor:** `action_plans`, `report_exports`
+- **Entegrasyon:** `integration_runs`, `data_quality_issues` — dahili
+  kullanımdadır; bunları görüntüleyen ayrı bir API/ekran bulunmaz
+- **Rapor:** `report_exports`
 - **Katkı ve iyileştirme çalışmaları:** `contribution_works`,
   `contribution_work_foremen`, `contribution_gains`
 - **Tespitler:** `anomalies`, `anomaly_analyses`, `anomaly_tool_calls` (Aşama 2
@@ -657,7 +645,30 @@ zincirine göre sıralı):
     `foreman_assignments`/`foreman_work_calendar`/`production_records`'a
     eklenir. Karaman migration'ıyla aynı gerekçeyle yıkıcıdır (organizasyon
     kimlikleri kökten değiştiği için `TRUNCATE` eder, `downgrade()`
-    `NotImplementedError` fırlatır) (HEAD)
+    `NotImplementedError` fırlatır)
+15. `d4f6a8b1c3e5` — Plana Uyum v3: asimetrik puanlama. Plan üstü üretim
+    artık cezalandırılmaz, ödüllendirilir (logaritmik olarak +%5'ten sonra
+    yavaşlar); plan altı öncekinden daha güçlü cezalandırılır. Yalnızca yeni
+    bir `kpi_calculation_rules` versiyonu ekler — var olan
+    `performance_scores`'u yeniden hesaplamaz (bkz. `apply-scoring-model-v2`)
+16. `f8a1c3e5b7d9` — `performance_records`'ın doğal anahtarına `plant_id`
+    ekler — bir formenin 2-4 eşzamanlı tesisinden yalnızca ilkinin KPI
+    kayıtları `ON CONFLICT DO NOTHING` ile hayatta kalıyordu, geri kalanı
+    `DUPLICATE` olarak atlanıyordu (bkz. [Veri Akışı](#veri-akışı-sağlayıcı--ingestion--skor))
+17. `a2c4e6f8b0d3` — `performance_records`'a da `(plant_id, chief_id) →
+    plants(id, chief_id)` kompozit FK'sini ekler (`production_records`/
+    `foreman_work_calendar`'da zaten vardı) — `ingestion.py`'nin
+    `assignment_resolver.py` üzerinden yaptığı doğrulamaya DB seviyesinde
+    bir yedek katman
+18. `b3d5f7a9c1e2` — `foreman_assignments` tarih aralığı bütünlüğü: `CHECK`
+    kısıtları (`start_date <= end_date`, pasif atamanın `end_date`'i
+    olmalı), aynı tesis+vardiya için tarih aralığı çakışmasını engelleyen
+    `EXCLUDE` kısıtı (`btree_gist`) ve bir formenin aynı anda yalnızca tek
+    bir şefe bağlı olabilmesini DB seviyesinde zorunlu kılan trigger
+19. `c9e2a4f6b8d0` — **Aksiyon Planları özelliği tamamen kaldırılır.**
+    `action_plans` tablosu ve ilgili enum'lar (`action_plan_status`,
+    `action_plan_priority`) drop edilir. Bilinçli olarak geri alınamaz
+    (`downgrade()` `NotImplementedError` fırlatır) (HEAD)
 
 `alembic upgrade head`, backend konteyneri her başladığında otomatik
 çalışır (`backend/Dockerfile` CMD'si).
@@ -810,7 +821,7 @@ npm run lint        # oxlint
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest -q                      # tüm paket (365 test fonksiyonu)
+.venv/Scripts/python.exe -m pytest -q                      # tüm paket (431 test fonksiyonu)
 .venv/Scripts/python.exe -m pytest tests/unit -q            # yalnızca unit (DB gerekmez)
 .venv/Scripts/python.exe -m pytest tests/integration/test_reports.py -q
 .venv/Scripts/python.exe -m pytest tests/unit/test_kpi_engine.py::TestX::test_y -q
@@ -820,17 +831,20 @@ cd backend
   `test_target_resolver.py`, `test_shift_utils.py`, `test_turkish_sort.py`,
   `test_reporting_pdf.py`, `test_production_kpi_derivation.py`,
   `test_contribution_calc.py`, `test_anomaly_demo_fallback.py`,
-  `test_anomaly_analysis_schema.py`, `test_anomaly_orchestrator_helpers.py`.
+  `test_anomaly_analysis_schema.py`, `test_anomaly_orchestrator_helpers.py`,
+  `test_assignment_resolver.py`, `test_shift_analysis.py`.
 - **Integration testler** (`tests/integration/`) **çalışan, migrasyonu
   yapılmış ve seed edilmiş** bir Postgres bekler — gerçek DB'ye
   `SessionLocal()` üzerinden bağlanır, ayrı bir şema fixture'ı yoktur:
   `test_auth_flow.py`, `test_dashboard.py`, `test_plants_foremen.py`,
-  `test_chiefs.py`, `test_data_quality.py`, `test_integration_status.py`,
-  `test_ingestion_idempotency.py`, `test_action_plans.py`,
-  `test_audit_logs.py`, `test_reports.py`, `test_contribution_works.py`,
+  `test_chiefs.py`, `test_data_quality.py`, `test_foreman_assignment_integrity.py`,
+  `test_ingestion_idempotency.py`, `test_reports.py`, `test_contribution_works.py`,
   `test_anomalies.py`, `test_anomaly_analysis_service.py`,
   `test_anomaly_generator.py`, `test_world.py`, `test_tools.py`,
-  `test_anomaly_orchestrator.py` (Tespitler'e ait olanlar için önce
+  `test_anomaly_orchestrator.py`, `test_shift_analysis.py`,
+  `test_analytics_agir_gitme_display.py`,
+  `test_production_kpi_derivation_plant_scoping.py`,
+  `test_n_plus_one_regression.py` (Tespitler'e ait olanlar için önce
   `seed-anomalies` çalıştırılmış olmalıdır).
 
 `pytest.ini`, `testpaths = tests` ve `pythonpath = .` tanımlar; ek yapılandırma

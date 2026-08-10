@@ -174,6 +174,121 @@ def score_plan_compliance_from_period_deviation(deviation_rate: float, normal_de
     return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
 
 
+# ---------------------------------------------------------------------------------------------
+# Plana Uyum v3 — ASİMETRİK (formula_type="ASYMMETRIC_PLAN_ACHIEVEMENT", kpi_calculation_rules
+# version 3'ten itibaren aktif). v1/v2'nin aksine planın ÜZERİNDE üretim artık bir sapma değil,
+# ödüllendirilen bir başarıdır — yalnızca planın ALTI cezalandırılır (daha güçlü bir eğimle).
+# Eski simetrik formül (`score_plan_compliance` ve üstü) kasıtlı olarak SİLİNMEDİ: geçmiş
+# kayıtları üreten kural (version <=2, is_active=False) hâlâ DB'de duruyor ve izlenebilir kalması
+# gerekiyor — bkz. kpi_calculation_rules version geçmişi.
+# ---------------------------------------------------------------------------------------------
+
+
+def _plan_achievement_from_deviation(
+    signed_deviation_pct: float,
+    *,
+    target_score: float,
+    positive_linear_limit: float,
+    positive_points_per_percentage_point: float,
+    positive_log_coefficient: float,
+    negative_linear_limit: float,
+    negative_points_per_percentage_point: float,
+    negative_log_coefficient: float,
+) -> float:
+    if signed_deviation_pct >= 0:
+        if signed_deviation_pct <= positive_linear_limit:
+            return target_score + positive_points_per_percentage_point * signed_deviation_pct
+        # `base_at_limit` doğrusal daldan türetilir ki limit noktasında iki dal aynı değeri
+        # üretsin (kesintisiz geçiş) — sabit bir sayı yerine.
+        base_at_limit = target_score + positive_points_per_percentage_point * positive_linear_limit
+        return base_at_limit + positive_log_coefficient * math.log2(signed_deviation_pct / positive_linear_limit)
+    deficit = abs(signed_deviation_pct)
+    if deficit <= negative_linear_limit:
+        return target_score - negative_points_per_percentage_point * deficit
+    base_at_limit = target_score - negative_points_per_percentage_point * negative_linear_limit
+    return base_at_limit - negative_log_coefficient * math.log2(deficit / negative_linear_limit)
+
+
+def plan_achievement_params(parameters: dict) -> dict:
+    """`kpi_calculation_rules.parameters`'tan `score_plan_achievement`/`_from_signed_deviation`e
+    geçirilecek anahtar kelime argümanlarını, iş kuralında verilen varsayılanlarla çıkarır — üç
+    çağrı noktası (ingestion/rescoring, dönemsel toplulaştırma, grafik nokta puanı) aynı kod
+    tekrarını yazmasın diye tek yerde tutulur."""
+    return {
+        "target_score": parameters.get("target_score", 100.0),
+        "positive_linear_limit": parameters.get("positive_linear_limit", 5.0),
+        "positive_points_per_percentage_point": parameters.get("positive_points_per_percentage_point", 1.0),
+        "positive_log_coefficient": parameters.get("positive_log_coefficient", 5.0),
+        "negative_linear_limit": parameters.get("negative_linear_limit", 5.0),
+        "negative_points_per_percentage_point": parameters.get("negative_points_per_percentage_point", 1.0),
+        "negative_log_coefficient": parameters.get("negative_log_coefficient", 10.0),
+        "minimum_score": parameters.get("minimum_score", 0.0),
+        "maximum_score": parameters.get("maximum_score"),
+    }
+
+
+def score_plan_achievement(
+    planned: float,
+    actual: float,
+    *,
+    target_score: float = 100.0,
+    positive_linear_limit: float = 5.0,
+    positive_points_per_percentage_point: float = 1.0,
+    positive_log_coefficient: float = 5.0,
+    negative_linear_limit: float = 5.0,
+    negative_points_per_percentage_point: float = 1.0,
+    negative_log_coefficient: float = 10.0,
+    minimum_score: float = 0.0,
+    maximum_score: float | None = None,
+) -> ScoreResult:
+    """Plana Uyum v3 (asimetrik): planın üzerinde üretim başarı, planın altı sapmadır — plan altı
+    daha güçlü cezalandırılır (varsayılan katsayılarla plan üstü/altı aynı %'de farklı puan
+    kaybı/kazancı üretir, bilinçli bir asimetridir). %5 sınırında doğrusal ve logaritmik dallar
+    kesintisiz birleşir."""
+    if planned is None or planned <= 0:
+        raise KpiCalculationError("Planlanan üretim sıfır, negatif veya eksik olamaz.")
+    signed_deviation = (actual - planned) / planned * 100.0
+    raw = _plan_achievement_from_deviation(
+        signed_deviation, target_score=target_score,
+        positive_linear_limit=positive_linear_limit,
+        positive_points_per_percentage_point=positive_points_per_percentage_point,
+        positive_log_coefficient=positive_log_coefficient,
+        negative_linear_limit=negative_linear_limit,
+        negative_points_per_percentage_point=negative_points_per_percentage_point,
+        negative_log_coefficient=negative_log_coefficient,
+    )
+    capped = max(minimum_score, raw) if maximum_score is None else _clip(raw, minimum_score, maximum_score)
+    return ScoreResult(raw_score=raw, capped_score=capped)
+
+
+def score_plan_achievement_from_signed_deviation(
+    signed_deviation_pct: float,
+    *,
+    target_score: float = 100.0,
+    positive_linear_limit: float = 5.0,
+    positive_points_per_percentage_point: float = 1.0,
+    positive_log_coefficient: float = 5.0,
+    negative_linear_limit: float = 5.0,
+    negative_points_per_percentage_point: float = 1.0,
+    negative_log_coefficient: float = 10.0,
+    minimum_score: float = 0.0,
+    maximum_score: float | None = None,
+) -> ScoreResult:
+    """Dönemsel Plana Uyum v3: yönlü sapma zaten hesaplanmış (bkz. analytics.py) olarak gelir —
+    tek bir kaydın değil, bir formen/dönemin ağırlıklı ortalama sapmasının puanlanması için."""
+    raw = _plan_achievement_from_deviation(
+        signed_deviation_pct, target_score=target_score,
+        positive_linear_limit=positive_linear_limit,
+        positive_points_per_percentage_point=positive_points_per_percentage_point,
+        positive_log_coefficient=positive_log_coefficient,
+        negative_linear_limit=negative_linear_limit,
+        negative_points_per_percentage_point=negative_points_per_percentage_point,
+        negative_log_coefficient=negative_log_coefficient,
+    )
+    capped = max(minimum_score, raw) if maximum_score is None else _clip(raw, minimum_score, maximum_score)
+    return ScoreResult(raw_score=raw, capped_score=capped)
+
+
 def _dispatch_hybrid_base_piecewise_log(actual: float, target: float, params: dict) -> ScoreResult:
     raw = _hybrid_base_piecewise_log(
         actual, target,
@@ -227,9 +342,11 @@ def compute_score_for_rule(
         return calculate_score(actual, target, rule_params)
 
     formula_type = parameters.get("formula_type")
-    if formula_type == "PIECEWISE_LINEAR_LOGARITHMIC":
+    if formula_type in ("PIECEWISE_LINEAR_LOGARITHMIC", "ASYMMETRIC_PLAN_ACHIEVEMENT"):
         if numerator is None or denominator is None:
             raise KpiCalculationError("Plana Uyum için fiili/planlanan miktar (numerator/denominator) gerekli.")
+        if formula_type == "ASYMMETRIC_PLAN_ACHIEVEMENT":
+            return score_plan_achievement(planned=denominator, actual=numerator, **plan_achievement_params(parameters))
         return score_plan_compliance(
             planned=denominator, actual=numerator,
             normal_deviation_limit=parameters.get("normal_deviation_limit", 5.0),

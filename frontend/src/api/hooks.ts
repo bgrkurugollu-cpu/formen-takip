@@ -1,9 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 import type {
-  ActionPlanCreatePayload,
-  ActionPlanItem,
-  ActionPlanUpdatePayload,
   AnalysisMode,
   AnomalyDetail,
   AnomalyListItem,
@@ -11,7 +8,6 @@ import type {
   AnomalySummary,
   AnomalyToolCallItem,
   AssignmentHistoryItem,
-  AuditLogEntry,
   CalculationDetail,
   ChiefDetail,
   ChiefForemanItem,
@@ -21,15 +17,12 @@ import type {
   ContributionWorkItem,
   ContributionWorkUpdatePayload,
   DashboardSummary,
-  DataQualityIssue,
-  DataQualitySummary,
   DistributionItem,
   FilterOptionsResponse,
   ForemanContributionSummary,
   ForemanDetail,
   ForemanKpiItem,
   ForemanListItem,
-  IntegrationRunItem,
   KpiAnalysis,
   KpiListItem,
   KpiSummaryItem,
@@ -39,6 +32,8 @@ import type {
   ReportExportMeta,
   ReportFormat,
   ReportType,
+  ShiftAnalysisCardsResponse,
+  ShiftAnomalyDetail,
   ShiftComparisonItem,
   TrendPoint,
 } from "./types";
@@ -290,75 +285,6 @@ export function useKpiAnalysis(kpiId: string | undefined, params: Params) {
 }
 
 
-export function useDataQualityIssues(params: Params) {
-  return useQuery({
-    queryKey: ["data-quality", "issues", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<DataQualityIssue>>("/data-quality/issues", { params })).data,
-  });
-}
-
-export function useDataQualitySummary() {
-  return useQuery({
-    queryKey: ["data-quality", "summary"],
-    queryFn: async () => (await apiClient.get<DataQualitySummary>("/data-quality/summary")).data,
-  });
-}
-
-export function useIntegrationRuns(params: Params) {
-  return useQuery({
-    queryKey: ["integration", "runs", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<IntegrationRunItem>>("/integration/runs", { params })).data,
-  });
-}
-
-export function useTriggerResync() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: { date_from: string; date_to: string; plant_codes?: string[] }) =>
-      (await apiClient.post<IntegrationRunItem>("/integration/resync", payload)).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["integration", "runs"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
-}
-
-export function useAuditLogs(params: Params) {
-  return useQuery({
-    queryKey: ["audit-logs", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<AuditLogEntry>>("/audit-logs", { params })).data,
-  });
-}
-
-export function useActionPlans(params: Params) {
-  return useQuery({
-    queryKey: ["action-plans", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<ActionPlanItem>>("/action-plans", { params })).data,
-  });
-}
-
-export function useCreateActionPlan() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: ActionPlanCreatePayload) =>
-      (await apiClient.post<ActionPlanItem>("/action-plans", payload)).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["action-plans"] });
-    },
-  });
-}
-
-export function useUpdateActionPlan() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: ActionPlanUpdatePayload }) =>
-      (await apiClient.patch<ActionPlanItem>(`/action-plans/${id}`, payload)).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["action-plans"] });
-    },
-  });
-}
-
 export function useReportHistory(params: Params) {
   return useQuery({
     queryKey: ["reports", params],
@@ -509,5 +435,25 @@ export function useAnalysisToolCalls(analysisId: string | undefined) {
     queryFn: async () =>
       (await apiClient.get<{ items: AnomalyToolCallItem[]; total: number }>(`/analyses/${analysisId}/tool-calls`)).data,
     enabled: !!analysisId,
+  });
+}
+
+// --- Vardiya Analizi ---
+
+// `/cards` tek istekte hem kart listesini hem özeti döner — `summary` ayrı bir endpoint/istek
+// olarak tutulsaydı, backend aynı ay/filtre için aylık ham kayıt çekme + hücre gruplama +
+// karşılaştırma işini iki ayrı istekte iki kez yapardı (bkz. shift_analysis.py::get_cards).
+export function useShiftAnalysisCards(params: Params) {
+  return useQuery({
+    queryKey: ["shift-analysis", "cards", params],
+    queryFn: async () => (await apiClient.get<ShiftAnalysisCardsResponse>("/shift-analysis/cards", { params })).data,
+  });
+}
+
+export function useShiftAnalysisDetail(params: { plant_id?: string; shift_id?: string; kpi_id?: string; month?: string }) {
+  return useQuery({
+    queryKey: ["shift-analysis", "detail", params],
+    queryFn: async () => (await apiClient.get<ShiftAnomalyDetail>("/shift-analysis/detail", { params })).data,
+    enabled: !!(params.plant_id && params.shift_id && params.kpi_id),
   });
 }

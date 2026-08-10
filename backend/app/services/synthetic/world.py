@@ -89,7 +89,7 @@ def resolve_shift(db: Session, value: str | int | None) -> Shift | None:
     if shift is None:
         shift = db.scalar(select(Shift).where(Shift.name.ilike(f"%{text}%")))
     if shift is None:
-        raise WorldLookupError(f"Vardiya bulunamadı: {value!r} (geçerli: V1, V2, V3 veya 1-3)")
+        raise WorldLookupError(f"Vardiya bulunamadı: {value!r} (geçerli: V1, V2 veya 1-2)")
     return shift
 
 
@@ -449,7 +449,7 @@ def changeover_records(db: Session, plant: Plant, shift: Shift | None, start: da
             {
                 "date": d.isoformat(), "previous_product": prev_p, "new_product": new_p,
                 "target_minutes": target, "actual_minutes": actual, "deviation_minutes": round(actual - target, 1),
-                "shift": shift.name if shift else rng.choice(["1. Vardiya", "2. Vardiya", "3. Vardiya"]),
+                "shift": shift.name if shift else rng.choice(["1. Vardiya", "2. Vardiya"]),
                 "description": "Standart ürün değişimi." if actual <= target * 1.15 else "Hedeften belirgin sapma gözlendi.",
             }
         )

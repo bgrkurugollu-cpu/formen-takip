@@ -156,7 +156,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
     ),
     "compare_shifts": ToolDefinition(
         "compare_shifts",
-        "Bir tesiste bir KPI için 1., 2. ve 3. vardiya ortalamalarını, tesis ortalamasını ve en iyi/en kötü vardiyayı karşılaştırır.",
+        "Bir tesiste bir KPI için 1. ve 2. vardiya ortalamalarını, tesis ortalamasını ve en iyi/en kötü vardiyayı karşılaştırır.",
         s.CompareShiftsArgs, _handle_compare_shifts,
     ),
     "compare_plants": ToolDefinition(

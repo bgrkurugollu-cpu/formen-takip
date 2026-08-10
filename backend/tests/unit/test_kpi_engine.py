@@ -24,6 +24,9 @@ from app.services.kpi_engine import (
     score_heavy_weight_from_period_ratio,
     score_inkita,
     score_iskarta,
+    plan_achievement_params,
+    score_plan_achievement,
+    score_plan_achievement_from_signed_deviation,
     score_plan_compliance,
     score_plan_compliance_from_period_deviation,
     validate_kpi_weights,
@@ -417,6 +420,98 @@ class TestScorePlanCompliance:
             score_plan_compliance(-10, 100)
 
 
+class TestScorePlanAchievement:
+    """Plana Uyum v3 (asimetrik) — planın üzerinde üretim ödüllendirilir, altı daha güçlü
+    cezalandırılır. %5 sınırında her iki dal da kesintisiz birleşir."""
+
+    @pytest.mark.parametrize(
+        "planned,actual,expected",
+        [
+            (100, 100, 100.0),
+            (100, 103, 103.0),
+            (100, 105, 105.0),
+            (100, 110, 110.0),
+            (100, 120, 115.0),
+            (100, 97, 97.0),
+            (100, 95, 95.0),
+            (100, 90, 85.0),
+            (100, 80, 75.0),
+        ],
+    )
+    def test_spec_examples_match(self, planned, actual, expected):
+        assert score_plan_achievement(planned=planned, actual=actual).capped_score == pytest.approx(expected, abs=0.01)
+
+    @pytest.mark.parametrize(
+        "planned,actual,expected",
+        [
+            (15120, 15120, 100.00),
+            (46055, 47775, 103.73),
+            (804781, 822628, 102.22),
+            (24467, 28963, 114.39),
+            (46087, 45263, 98.21),
+            (107783, 91038, 78.64),
+            (262191, 182368, 68.94),
+        ],
+    )
+    def test_production_record_examples_match_spec(self, planned, actual, expected):
+        assert score_plan_achievement(planned=planned, actual=actual).capped_score == pytest.approx(expected, abs=0.01)
+
+    def test_continuous_at_the_positive_5_percent_boundary(self):
+        just_below = score_plan_achievement(planned=100, actual=104.999).capped_score
+        at_boundary = score_plan_achievement(planned=100, actual=105).capped_score
+        just_above = score_plan_achievement(planned=100, actual=105.001).capped_score
+        assert just_below == pytest.approx(at_boundary, abs=0.01)
+        assert just_above == pytest.approx(at_boundary, abs=0.01)
+
+    def test_continuous_at_the_negative_5_percent_boundary(self):
+        just_below = score_plan_achievement(planned=100, actual=95.001).capped_score
+        at_boundary = score_plan_achievement(planned=100, actual=95).capped_score
+        just_above = score_plan_achievement(planned=100, actual=94.999).capped_score
+        assert just_below == pytest.approx(at_boundary, abs=0.01)
+        assert just_above == pytest.approx(at_boundary, abs=0.01)
+
+    def test_continuous_at_zero_deviation(self):
+        """Sağ ve sol daldan (S->0+, S->0-) gelen limit de tam 100'de birleşmeli."""
+        just_above = score_plan_achievement(planned=100, actual=100.001).capped_score
+        just_below = score_plan_achievement(planned=100, actual=99.999).capped_score
+        assert just_above == pytest.approx(100.0, abs=0.01)
+        assert just_below == pytest.approx(100.0, abs=0.01)
+
+    def test_over_plan_and_under_plan_score_asymmetrically(self):
+        """Bilinçli asimetri (bkz. spec bölüm 6): aynı %'de plan altı, plan üstünden daha çok
+        puan kaybettirir (+10% -> ~110, -10% -> ~85 — 100'e uzaklıkları eşit değil)."""
+        over = score_plan_achievement(planned=1000, actual=1100)
+        under = score_plan_achievement(planned=1000, actual=900)
+        assert over.capped_score == pytest.approx(110.0, abs=0.01)
+        assert under.capped_score == pytest.approx(85.0, abs=0.01)
+        assert (100.0 - under.capped_score) > (over.capped_score - 100.0)
+
+    def test_no_ceiling_for_very_high_overproduction(self):
+        result = score_plan_achievement(planned=100, actual=1000)
+        assert result.capped_score > 120
+
+    def test_missing_or_invalid_planned_raises(self):
+        with pytest.raises(KpiCalculationError):
+            score_plan_achievement(planned=0, actual=100)
+        with pytest.raises(KpiCalculationError):
+            score_plan_achievement(planned=-10, actual=100)
+
+    def test_from_signed_deviation_matches_direct_call(self):
+        direct = score_plan_achievement(planned=1000, actual=1123).capped_score
+        from_dev = score_plan_achievement_from_signed_deviation(12.3).capped_score
+        assert direct == pytest.approx(from_dev, abs=0.01)
+
+    def test_minimum_score_floor_applies_even_without_explicit_maximum(self):
+        result = score_plan_achievement(planned=100, actual=0.0001, minimum_score=0.0)
+        assert result.capped_score >= 0.0
+
+    def test_plan_achievement_params_reads_overrides_and_defaults(self):
+        parsed = plan_achievement_params({"positive_log_coefficient": 7.5})
+        assert parsed["positive_log_coefficient"] == 7.5
+        assert parsed["negative_log_coefficient"] == 10.0
+        assert parsed["target_score"] == 100.0
+
+
 class TestCustomFormulaDispatch:
     def test_dispatches_signed_absolute_piecewise(self):
         result = calculate_custom_score(0.39, 0.20, "SIGNED_ABSOLUTE_PIECEWISE", {"good_coefficient": 9, "bad_coefficient": 12})
@@ -455,6 +550,21 @@ class TestComputeScoreForRule:
             numerator=15120, denominator=15120,
         )
         assert result.capped_score == pytest.approx(100.0)
+
+    def test_asymmetric_plan_achievement_formula_type_uses_numerator_denominator(self):
+        result = compute_score_for_rule(
+            CalculationType.CUSTOM_FORMULA,
+            {"formula_type": "ASYMMETRIC_PLAN_ACHIEVEMENT"},
+            actual=999, target=999,  # kasıtlı olarak yanlış — formül bunları hiç kullanmamalı
+            numerator=1100, denominator=1000,
+        )
+        assert result.capped_score == pytest.approx(110.0, abs=0.01)
+
+    def test_asymmetric_plan_achievement_missing_numerator_denominator_raises(self):
+        with pytest.raises(KpiCalculationError):
+            compute_score_for_rule(
+                CalculationType.CUSTOM_FORMULA, {"formula_type": "ASYMMETRIC_PLAN_ACHIEVEMENT"}, actual=100, target=100,
+            )
 
     def test_non_custom_formula_falls_back_to_generic_engine(self):
         result = compute_score_for_rule(CalculationType.HIGHER_IS_BETTER, {}, actual=950, target=1000, min_score=0, max_score=120)

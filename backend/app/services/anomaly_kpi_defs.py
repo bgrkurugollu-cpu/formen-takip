@@ -49,8 +49,8 @@ KPI_DEFINITIONS: dict[str, dict] = {
     "PLANA_UYUM": {
         "name": "Plana Uyum Oranı",
         "description": (
-            "Gerçekleşen üretimin, güncel (revize) üretim planına göre mutlak sapması "
-            "(plan altı ve plan üstü eşit ağırlıkta sapma sayılır)."
+            "Gerçekleşen üretimin, güncel (revize) üretim planına göre yönlü sapması "
+            "(planın üzerinde üretim ödüllendirilir, planın altında üretim daha güçlü cezalandırılır)."
         ),
         "desired_direction": "high",
         "warning_threshold": 90.0,

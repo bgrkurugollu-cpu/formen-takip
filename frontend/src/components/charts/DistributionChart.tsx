@@ -4,7 +4,7 @@ import { resolveChartInk } from "../../lib/chartColors";
 import { useTheme } from "../../context/ThemeContext";
 import { EmptyState } from "../StateViews";
 
-export function DistributionChart({ items }: { items: DistributionItem[] }) {
+export function DistributionChart({ items, onSelect }: { items: DistributionItem[]; onSelect?: (item: DistributionItem) => void }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const ink = resolveChartInk(isDark);
@@ -27,7 +27,15 @@ export function DistributionChart({ items }: { items: DistributionItem[] }) {
           labelStyle={{ color: ink.primary }}
           itemStyle={{ color: ink.primary }}
         />
-        <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={48}>
+        <Bar
+          dataKey="count"
+          radius={[4, 4, 0, 0]}
+          barSize={48}
+          cursor={onSelect ? "pointer" : undefined}
+          onClick={(data: { payload?: DistributionItem }) => {
+            if (onSelect && data.payload && data.payload.count > 0) onSelect(data.payload);
+          }}
+        >
           {items.map((item, idx) => (
             <Cell key={idx} fill={item.color} />
           ))}

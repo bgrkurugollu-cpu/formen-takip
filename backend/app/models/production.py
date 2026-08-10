@@ -11,12 +11,6 @@ from app.models.enums import SourceSystem
 
 
 class Product(TimestampMixin, Base):
-    """Ürün/malzeme master verisi (SAP malzeme master'ının karşılığı).
-
-    `standard_gram`/`upper_gram_limit` bilinçli olarak nullable — bir ürünün henüz
-    gramaj spesifikasyonu tanımlanmamışsa Ağır Gitme KPI'sı bu ürün için hesaplanmaz
-    (bkz. app/services/production_kpi_derivation.py)."""
-
     __tablename__ = "products"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -31,7 +25,6 @@ class Product(TimestampMixin, Base):
 
 
 class ProductionLine(TimestampMixin, Base):
-    """Tesis içindeki üretim hattı / iş merkezi."""
 
     __tablename__ = "production_lines"
 
@@ -43,8 +36,6 @@ class ProductionLine(TimestampMixin, Base):
 
 
 class CompanyCalendarDay(TimestampMixin, Base):
-    """Şirket geneli tatil takvimi — hafta sonu bilgiyi tarihin kendisinden türetir,
-    yalnızca tatil günleri (yılın gün-ay bilgisi kod içinde tekrarlanmadan) burada tutulur."""
 
     __tablename__ = "company_calendar"
 
@@ -55,9 +46,6 @@ class CompanyCalendarDay(TimestampMixin, Base):
 
 
 class ForemanWorkCalendar(TimestampMixin, Base):
-    """Formenin hangi tarihte fiilen çalıştığı (ve hangi tesis/şef/vardiya/hatta) —
-    `ForemanAssignment`'ın (yapısal atama, nadiren değişir) gün bazlı somutlaşmış hali.
-    Bir üretim kaydı yalnızca burada `is_working=True` bir satır varsa formene bağlanabilir."""
 
     __tablename__ = "foreman_work_calendar"
     __table_args__ = (
@@ -76,10 +64,6 @@ class ForemanWorkCalendar(TimestampMixin, Base):
 
 
 class ProductionRecord(TimestampMixin, Base):
-    """Ham üretim/kayıp kaydı — SAP'in üretim emri/konfirmasyonu ile göndereceği verinin
-    karşılığı. `performance_records`'un idempotency deseni (kaynak + doğal anahtar) birebir
-    tekrarlanır. Bu tablo salt bir "ham veri" katmanıdır; KPI'lar buradan türetilir
-    (bkz. app/services/production_kpi_derivation.py) — hiçbir KPI yüzdesi burada tutulmaz."""
 
     __tablename__ = "production_records"
     __table_args__ = (
@@ -124,8 +108,6 @@ class ProductionRecord(TimestampMixin, Base):
     gsf_qty: Mapped[float | None] = mapped_column(Numeric(14, 4))
     iskarta_qty: Mapped[float | None] = mapped_column(Numeric(14, 4))
 
-    # Teknik + İmalat, İnkita puanlamasına dahil edilir; Diğer hiçbir zaman dahil edilmez
-    # (bkz. app/services/production_kpi_derivation.py).
     technical_downtime_minutes: Mapped[float | None] = mapped_column(Numeric(10, 2))
     manufacturing_downtime_minutes: Mapped[float | None] = mapped_column(Numeric(10, 2))
     other_downtime_minutes: Mapped[float | None] = mapped_column(Numeric(10, 2))

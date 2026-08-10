@@ -170,7 +170,6 @@ export interface ForemanListItem {
   full_name: string;
   is_active: boolean;
   assignments: ForemanAssignmentItem[];
-  shift: { id: string; name: string } | null;
   total_score: number;
   is_reliable: boolean;
   level: PerformanceLevel;
@@ -183,7 +182,6 @@ export interface ForemanDetail {
   hire_date: string;
   is_active: boolean;
   assignments: ForemanAssignmentItem[];
-  shift: { id: string; name: string } | null;
   total_score: number;
   is_reliable: boolean;
   level: PerformanceLevel;
@@ -228,7 +226,6 @@ export interface ChiefForemanItem {
   id: string;
   employee_number: string | null;
   full_name: string | null;
-  shift: { id: string; name: string } | null;
   total_score: number;
   is_reliable: boolean;
   level: PerformanceLevel;
@@ -265,7 +262,11 @@ export interface ForemanKpiItem {
   };
   plana_uyum?: {
     avg_attainment_pct: number;
-    direction: "OVER_PLAN" | "UNDER_PLAN" | "ON_PLAN";
+    planned_qty: number | null;
+    actual_qty: number | null;
+    kg_diff: number | null;
+    signed_pct_deviation: number | null;
+    direction: "ABOVE_PLAN" | "BELOW_PLAN" | "ON_PLAN";
   };
 }
 
@@ -285,6 +286,14 @@ export interface CalculationDetail {
   weighted_contribution: number;
   data_source: string;
   source_record_id: string;
+  plana_uyum?: {
+    planned_qty: number | null;
+    actual_qty: number | null;
+    kg_diff: number | null;
+    signed_pct_deviation: number | null;
+    status: "ABOVE_PLAN" | "BELOW_PLAN" | "ON_PLAN";
+    formula_version: number | null;
+  };
 }
 
 export interface AssignmentHistoryItem {
@@ -308,8 +317,19 @@ export interface KpiListItem {
   is_critical: boolean;
 }
 
+export interface KpiForemanValueItem {
+  foreman_id: string;
+  full_name: string | null;
+  avg_actual: number;
+  avg_target: number;
+  avg_score: number;
+  record_count: number;
+  tier: "better" | "near" | "worse";
+  level: PerformanceLevel | null;
+}
+
 export interface KpiAnalysis {
-  kpi: { id: string; code: string; name: string; unit: string };
+  kpi: { id: string; code: string; name: string; unit: string; decimal_places: number };
   company_avg_score: number;
   company_avg_target: number | null;
   company_avg_actual: number | null;
@@ -318,108 +338,10 @@ export interface KpiAnalysis {
   shift_comparison: { id: string; name: string; score: number }[];
   best_foremen: EntityRef[];
   worst_foremen: EntityRef[];
+  foreman_values: KpiForemanValueItem[];
   trend: { date: string; score: number }[];
 }
 
-
-export interface DataQualityIssue {
-  id: string;
-  issue_type: string;
-  description: string;
-  detected_at: string;
-  status: string;
-  performance_date: string | null;
-  source_system: string | null;
-  source_record_id: string | null;
-  plant_name: string | null;
-  foreman_name: string | null;
-  kpi_name: string | null;
-}
-
-export interface DataQualitySummary {
-  by_type: { issue_type: string; count: number }[];
-  top_plants: { plant_id: string; plant_name: string; issue_count: number }[];
-}
-
-export interface IntegrationRunItem {
-  id: string;
-  source_system: string;
-  started_at: string;
-  finished_at: string | null;
-  status: string;
-  processed_count: number;
-  success_count: number;
-  error_count: number;
-  skipped_count: number;
-  duration_seconds: number | null;
-}
-
-export interface AuditLogEntry {
-  id: string;
-  action: string;
-  entity: string | null;
-  old_value: string | null;
-  new_value: string | null;
-  user_name: string | null;
-  ip_address: string | null;
-  success: boolean;
-  error_message: string | null;
-  created_at: string;
-}
-
-export type ActionPlanStatus = "open" | "in_progress" | "on_hold" | "completed" | "cancelled" | "delayed";
-export type ActionPlanPriority = "low" | "normal" | "high" | "critical";
-
-export interface ActionPlanRef {
-  id: string;
-  name: string;
-}
-
-export interface ActionPlanItem {
-  id: string;
-  title: string;
-  description: string | null;
-  plant: ActionPlanRef | null;
-  chief: ActionPlanRef | null;
-  shift: ActionPlanRef | null;
-  foreman: ActionPlanRef | null;
-  kpi: ActionPlanRef | null;
-  owner: string;
-  created_by: string | null;
-  priority: ActionPlanPriority;
-  status: ActionPlanStatus;
-  start_date: string;
-  target_end_date: string;
-  actual_end_date: string | null;
-  completion_percentage: number;
-  outcome_notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ActionPlanCreatePayload {
-  title: string;
-  description?: string;
-  plant_id?: string;
-  chief_id?: string;
-  shift_id?: string;
-  foreman_id?: string;
-  kpi_id?: string;
-  owner: string;
-  priority: ActionPlanPriority;
-  status: ActionPlanStatus;
-  start_date: string;
-  target_end_date: string;
-  completion_percentage: number;
-  outcome_notes?: string;
-}
-
-export type ActionPlanUpdatePayload = Partial<
-  Pick<
-    ActionPlanCreatePayload,
-    "title" | "description" | "owner" | "priority" | "status" | "target_end_date" | "completion_percentage" | "outcome_notes"
-  >
-> & { actual_end_date?: string };
 
 export type ReportType =
   | "company_summary" | "plant_comparison" | "shift_comparison" | "foreman_performance"
@@ -836,4 +758,86 @@ export interface AnomalySummary {
   pending_analysis_count: number;
   opened_last_7_days: number;
   resolved_count: number;
+}
+
+// --- Vardiya Analizi ---
+
+export type ShiftAnomalySeverity = "medium" | "high";
+
+export interface ShiftAnalysisPeriod {
+  month_start: string;
+  month_end: string;
+  label: string;
+}
+
+export interface ShiftAnalysisSummary {
+  period: ShiftAnalysisPeriod;
+  total_anomalies: number;
+  high_count: number;
+  medium_count: number;
+  top_plant: { id: string; name: string; count: number } | null;
+  top_kpi: { id: string; name: string; count: number } | null;
+  max_pct_diff: number | null;
+}
+
+export interface ShiftAnomalyForemanStat {
+  id: string;
+  name: string;
+  employee_number: string;
+  avg_actual: number;
+  record_count: number;
+  week_count: number;
+}
+
+export interface ShiftAnomalyCard {
+  id: string;
+  plant_id: string;
+  plant_name: string;
+  plant_sequence: number;
+  factory_id: string;
+  factory_code: string;
+  shift_id: string;
+  shift_name: string;
+  kpi_id: string;
+  kpi_code: string;
+  kpi_name: string;
+  kpi_unit: string;
+  success_direction_higher: boolean;
+  severity: ShiftAnomalySeverity;
+  title: string;
+  better: ShiftAnomalyForemanStat;
+  worse: ShiftAnomalyForemanStat;
+  abs_diff: number;
+  pct_diff: number;
+  compared_weeks: number;
+  period: ShiftAnalysisPeriod;
+}
+
+export interface ShiftAnalysisCardsResponse {
+  items: ShiftAnomalyCard[];
+  summary: ShiftAnalysisSummary;
+}
+
+export interface ShiftAnomalyWeeklyPoint {
+  week_index: number;
+  week_label: string;
+  foreman_id: string;
+  avg_actual: number;
+  day_count: number;
+}
+
+export interface ShiftAnomalyCrossKpiSignal {
+  kpi_id: string;
+  kpi_code: string;
+  kpi_name: string;
+  pct_diff: number;
+  severity: ShiftAnomalySeverity;
+  same_foreman_better: boolean;
+}
+
+export interface ShiftAnomalyDetail extends ShiftAnomalyCard {
+  weekly_breakdown: ShiftAnomalyWeeklyPoint[];
+  cross_kpi_signals: ShiftAnomalyCrossKpiSignal[];
+  pattern_commentary: string;
+  is_recurring_pattern: boolean;
 }

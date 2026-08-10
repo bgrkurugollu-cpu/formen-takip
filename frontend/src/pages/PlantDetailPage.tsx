@@ -1,21 +1,26 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { FilterBar } from "../components/FilterBar";
 import { Card, EmptyState, ErrorState, LoadingState } from "../components/StateViews";
 import { PerformanceLevelBadge } from "../components/PerformanceLevelBadge";
 import { KpiBarChart } from "../components/charts/KpiBarChart";
 import { RankingBarChart } from "../components/charts/RankingBarChart";
-import { RelatedActionPlans } from "../components/RelatedActionPlans";
 import {
   usePlantChiefs, usePlantDetail, usePlantForemen, usePlantKpis, usePlantShifts, usePlantSummary,
 } from "../api/hooks";
 import { useFilters } from "../hooks/useFilters";
+import { withSearchParam } from "../lib/chartDrilldown";
 import { rowHoverClass, rowStyle, tdClass, thClass, theadRowStyle, thStyle } from "../lib/tableStyles";
 
 export function PlantDetailPage() {
   const { plantId } = useParams<{ plantId: string }>();
   const { filters, setFilters, clearFilters, asQueryParams } = useFilters();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Bu sayfadan bir KPI'a ya da vardiyaya gidildiğinde, görüntülenen tesis bağlamının
+  // kaybolmaması için mevcut filtrelere bu tesisin ID'si eklenir (bkz. ShiftDetailPage'deki
+  // aynı desen).
+  const searchWithPlant = withSearchParam(location.search, "plant_ids", plantId ?? "");
 
   const plant = usePlantDetail(plantId);
   const summary = usePlantSummary(plantId, asQueryParams);
@@ -67,13 +72,25 @@ export function PlantDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title="KPI Bazlı Performans">
-          {kpis.isLoading ? <LoadingState /> : kpis.data ? <KpiBarChart items={kpis.data.items} /> : <ErrorState />}
+          {kpis.isLoading ? (
+            <LoadingState />
+          ) : kpis.data ? (
+            <KpiBarChart
+              items={kpis.data.items}
+              onSelect={(item) => navigate({ pathname: "/kpis", search: withSearchParam(searchWithPlant, "kpi", item.id) })}
+            />
+          ) : (
+            <ErrorState />
+          )}
         </Card>
         <Card title="Vardiya Karşılaştırması">
           {shifts.isLoading ? (
             <LoadingState />
           ) : shifts.data ? (
-            <RankingBarChart items={shifts.data.items.map((s) => ({ name: s.name, score: s.total_score, color: s.level.color }))} />
+            <RankingBarChart
+              items={shifts.data.items.map((s) => ({ id: s.shift_id, name: s.name, score: s.total_score, color: s.level.color }))}
+              onSelect={(item) => navigate({ pathname: `/shifts/${item.id}`, search: searchWithPlant })}
+            />
           ) : (
             <ErrorState />
           )}
@@ -148,8 +165,6 @@ export function PlantDetailPage() {
           </div>
         )}
       </Card>
-
-      {plantId && <RelatedActionPlans plantId={plantId} />}
     </div>
   );
 }

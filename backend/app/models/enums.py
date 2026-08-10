@@ -55,22 +55,6 @@ class SuccessDirection(str, enum.Enum):
     LOWER_IS_BETTER = "lower_is_better"
 
 
-class ActionPlanStatus(str, enum.Enum):
-    OPEN = "open"
-    IN_PROGRESS = "in_progress"
-    ON_HOLD = "on_hold"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-    DELAYED = "delayed"
-
-
-class ActionPlanPriority(str, enum.Enum):
-    LOW = "low"
-    NORMAL = "normal"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
 class ReportType(str, enum.Enum):
     COMPANY_SUMMARY = "company_summary"
     PLANT_COMPARISON = "plant_comparison"

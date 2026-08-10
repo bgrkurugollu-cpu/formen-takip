@@ -1,28 +1,49 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { FilterBar } from "../components/FilterBar";
-import { Card, ErrorState, LoadingState } from "../components/StateViews";
+import { Card, EmptyState, ErrorState, LoadingState } from "../components/StateViews";
 import { RankingBarChart } from "../components/charts/RankingBarChart";
 import { TrendChart } from "../components/charts/TrendChart";
-import { RelatedActionPlans } from "../components/RelatedActionPlans";
+import { ForemanKpiTargetChart } from "../components/charts/ForemanKpiTargetChart";
+import { ForemanScoreRow } from "../components/ForemanRankingCard";
 import { useKpiAnalysis, useKpis } from "../api/hooks";
-import { useFilters } from "../hooks/useFilters";
+import { useFilters, type FilterState } from "../hooks/useFilters";
 import { categoricalColor } from "../lib/chartColors";
 import { useTheme } from "../context/ThemeContext";
+
+function periodLabel(filters: FilterState): string {
+  const from = new Date(filters.dateFrom);
+  const to = new Date(filters.dateTo);
+  const sameMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth();
+  if (sameMonth) return to.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
+  const fmt = (d: Date) => d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return `${fmt(from)} – ${fmt(to)}`;
+}
+
+function scopeLabel(filters: FilterState): string {
+  if (filters.plantIds.length === 1) return "1 Tesis";
+  if (filters.plantIds.length > 1) return `${filters.plantIds.length} Tesis`;
+  if (filters.factoryIds.length === 1) return "1 Fabrika";
+  if (filters.factoryIds.length > 1) return `${filters.factoryIds.length} Fabrika`;
+  return "Tüm Tesisler";
+}
 
 export function KpiAnalysisPage() {
   const { filters, setFilters, clearFilters, asQueryParams } = useFilters();
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const kpis = useKpis();
-  const [selectedKpiId, setSelectedKpiId] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  useEffect(() => {
-    if (!selectedKpiId && kpis.data?.items.length) {
-      setSelectedKpiId(kpis.data.items[0].id);
-    }
-  }, [kpis.data, selectedKpiId]);
+  // Seçili KPI URL'de ("kpi" query param) tutulur, böylece Genel Bakış gibi başka
+  // sayfalardan doğrudan bu KPI'a deep-link verilebilir; belirtilmemişse ilk KPI'a düşer.
+  const selectedKpiId = searchParams.get("kpi") ?? kpis.data?.items[0]?.id ?? null;
+
+  const selectKpi = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("kpi", id);
+    setSearchParams(next, { replace: true });
+  };
 
   const analysis = useKpiAnalysis(selectedKpiId ?? undefined, asQueryParams);
 
@@ -36,7 +57,7 @@ export function KpiAnalysisPage() {
           return (
             <button
               key={k.id}
-              onClick={() => setSelectedKpiId(k.id)}
+              onClick={() => selectKpi(k.id)}
               className="rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors"
               style={
                 active
@@ -64,6 +85,17 @@ export function KpiAnalysisPage() {
             <TrendChart points={analysis.data.trend.map((t) => ({ date: t.date, total_score: t.score, is_reliable: true }))} />
           </Card>
 
+          <Card>
+            <ForemanKpiTargetChart
+              points={analysis.data.foreman_values}
+              target={analysis.data.company_avg_target}
+              unit={analysis.data.kpi.unit}
+              kpiName={analysis.data.kpi.name}
+              decimalPlaces={analysis.data.kpi.decimal_places}
+              subtitle={`${periodLabel(filters)} · ${scopeLabel(filters)}`}
+            />
+          </Card>
+
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card title="En Başarılı Tesisler">
               <RankingBarChart
@@ -84,28 +116,40 @@ export function KpiAnalysisPage() {
               />
             </Card>
             <Card title="En Başarılı Formenler">
-              <ul className="flex flex-col gap-2 text-[13px]">
-                {analysis.data.best_foremen.map((f) => (
-                  <li key={f.id} className="flex justify-between">
-                    <button onClick={() => navigate(`/foremen/${f.id}`)} className="text-left hover:underline" style={{ color: "var(--text-secondary)" }}>{f.name}</button>
-                    <span className="font-semibold tabular-nums" style={{ color: "var(--accent)" }}>{f.score?.toFixed(1)}</span>
-                  </li>
+              <div className="flex flex-col gap-0.5">
+                {analysis.data.best_foremen.length === 0 && <EmptyState message="Veri yok" />}
+                {analysis.data.best_foremen.map((f, i) => (
+                  <ForemanScoreRow
+                    key={f.id}
+                    id={f.id}
+                    name={f.name ?? "-"}
+                    score={f.score ?? 0}
+                    rank={i + 1}
+                    color="#16a34a"
+                    showRankTint
+                    onNavigate={(id) => navigate(`/foremen/${id}`)}
+                  />
                 ))}
-              </ul>
+              </div>
             </Card>
             <Card title="En Düşük Performanslı Formenler">
-              <ul className="flex flex-col gap-2 text-[13px]">
-                {analysis.data.worst_foremen.map((f) => (
-                  <li key={f.id} className="flex justify-between">
-                    <button onClick={() => navigate(`/foremen/${f.id}`)} className="text-left hover:underline" style={{ color: "var(--text-secondary)" }}>{f.name}</button>
-                    <span className="font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{f.score?.toFixed(1)}</span>
-                  </li>
+              <div className="flex flex-col gap-0.5">
+                {analysis.data.worst_foremen.length === 0 && <EmptyState message="Veri yok" />}
+                {analysis.data.worst_foremen.map((f, i) => (
+                  <ForemanScoreRow
+                    key={f.id}
+                    id={f.id}
+                    name={f.name ?? "-"}
+                    score={f.score ?? 0}
+                    rank={i + 1}
+                    color="#ea580c"
+                    showRankTint={false}
+                    onNavigate={(id) => navigate(`/foremen/${id}`)}
+                  />
                 ))}
-              </ul>
+              </div>
             </Card>
           </div>
-
-          {selectedKpiId && <RelatedActionPlans kpiId={selectedKpiId} />}
         </>
       )}
     </div>

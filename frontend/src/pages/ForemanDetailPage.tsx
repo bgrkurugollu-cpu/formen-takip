@@ -6,7 +6,6 @@ import { Card, EmptyState, ErrorState, LoadingState } from "../components/StateV
 import { PerformanceLevelBadge } from "../components/PerformanceLevelBadge";
 import { TrendChart } from "../components/charts/TrendChart";
 import { KpiRadarChart } from "../components/charts/KpiRadarChart";
-import { RelatedActionPlans } from "../components/RelatedActionPlans";
 import { ForemanContributionSummary } from "../components/ForemanContributionSummary";
 import {
   useForemanAssignmentHistory, useForemanCalculationDetail, useForemanDetail,
@@ -14,6 +13,18 @@ import {
 } from "../api/hooks";
 import { useFilters } from "../hooks/useFilters";
 import type { ForemanKpiItem } from "../api/types";
+
+const PLAN_STATUS_LABEL: Record<"ABOVE_PLAN" | "BELOW_PLAN" | "ON_PLAN", string> = {
+  ABOVE_PLAN: "Planın Üzerinde",
+  BELOW_PLAN: "Planın Altında",
+  ON_PLAN: "Plana Uygun",
+};
+
+const PLAN_STATUS_COLOR: Record<"ABOVE_PLAN" | "BELOW_PLAN" | "ON_PLAN", string> = {
+  ABOVE_PLAN: "#16a34a",
+  BELOW_PLAN: "#dc2626",
+  ON_PLAN: "var(--text-primary)",
+};
 
 function CalculationDetailModal({ foremanId, kpi, onClose }: { foremanId: string; kpi: ForemanKpiItem; onClose: () => void }) {
   const detail = useForemanCalculationDetail(foremanId, kpi.kpi_id);
@@ -59,6 +70,29 @@ function CalculationDetailModal({ foremanId, kpi, onClose }: { foremanId: string
             <dd className="text-right font-medium" style={{ color: "var(--text-primary)" }}>{detail.data.data_source}</dd>
             <dt style={{ color: "var(--text-muted)" }}>Kaynak Kayıt ID</dt>
             <dd className="truncate text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>{detail.data.source_record_id}</dd>
+            {detail.data.plana_uyum && (
+              <>
+                <dt className="col-span-2 mt-1 pt-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)", borderTop: "1px solid var(--border)" }}>
+                  Plana Uyum Detayı
+                </dt>
+                <dt style={{ color: "var(--text-muted)" }}>Planlanan Üretim</dt>
+                <dd className="text-right font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{detail.data.plana_uyum.planned_qty?.toFixed(2)} KG</dd>
+                <dt style={{ color: "var(--text-muted)" }}>Fiili Üretim</dt>
+                <dd className="text-right font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{detail.data.plana_uyum.actual_qty?.toFixed(2)} KG</dd>
+                <dt style={{ color: "var(--text-muted)" }}>KG Farkı</dt>
+                <dd className="text-right font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
+                  {detail.data.plana_uyum.kg_diff !== null && detail.data.plana_uyum.kg_diff >= 0 ? "+" : ""}{detail.data.plana_uyum.kg_diff?.toFixed(2)} KG
+                </dd>
+                <dt style={{ color: "var(--text-muted)" }}>Yönlü Sapma</dt>
+                <dd className="text-right font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
+                  {detail.data.plana_uyum.signed_pct_deviation !== null && detail.data.plana_uyum.signed_pct_deviation >= 0 ? "+" : ""}%{detail.data.plana_uyum.signed_pct_deviation?.toFixed(2)}
+                </dd>
+                <dt style={{ color: "var(--text-muted)" }}>Durum</dt>
+                <dd className="text-right font-medium" style={{ color: PLAN_STATUS_COLOR[detail.data.plana_uyum.status] }}>
+                  {PLAN_STATUS_LABEL[detail.data.plana_uyum.status]}
+                </dd>
+              </>
+            )}
           </dl>
         )}
       </div>
@@ -153,8 +187,8 @@ export function ForemanDetailPage() {
                   <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>Diğer duruş puana dahil değil</p>
                 )}
                 {k.plana_uyum && (
-                  <p className="mt-1 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-                    {k.plana_uyum.direction === "OVER_PLAN" ? "Plan üstü" : k.plana_uyum.direction === "UNDER_PLAN" ? "Plan altı" : "Plana uygun"} üretim
+                  <p className="mt-1 text-xs font-medium" style={{ color: PLAN_STATUS_COLOR[k.plana_uyum.direction] }}>
+                    {PLAN_STATUS_LABEL[k.plana_uyum.direction]} üretim
                   </p>
                 )}
               </button>
@@ -182,8 +216,6 @@ export function ForemanDetailPage() {
           </ul>
         )}
       </Card>
-
-      {foremanId && <RelatedActionPlans foremanId={foremanId} />}
 
       {selectedKpi && foremanId && (
         <CalculationDetailModal foremanId={foremanId} kpi={selectedKpi} onClose={() => setSelectedKpi(null)} />

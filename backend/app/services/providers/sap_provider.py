@@ -34,4 +34,8 @@ class SAPDataProvider(PerformanceDataProvider):
                 "(OData/BAPI/IDoc/Integration Suite) uygulandığında SAP_BASE_URL, "
                 "SAP_CLIENT_ID, SAP_CLIENT_SECRET ortam değişkenleri ile aktifleştirilecektir."
             )
+        # NOT: SAP ham zaman damgalarından `RawPerformanceRecord.performance_date` türetilirken
+        # V2 (gece, 19:00-07:00) vardiyası için gece yarısını aşan olay saatleri bir önceki güne
+        # ait olmalıdır — bunun için app/services/shift_utils.py::resolve_production_date kullanılmalı,
+        # yeniden yazılmamalıdır (bkz. shift.start_time/end_time, Shift.crosses_midnight).
         raise NotImplementedError("SAP entegrasyonu henüz implement edilmedi.")

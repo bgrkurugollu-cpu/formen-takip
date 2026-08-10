@@ -23,7 +23,7 @@ class GetAnomalyDetailsArgs(BaseModel):
 
 class GetKpiHistoryArgs(_DateRangeArgs):
     plant_id: str = Field(description="Tesis kodu (ör. PLT12) veya ID'si")
-    shift: str | None = Field(default=None, description="Vardiya kodu (V1/V2/V3) veya numarası (1-3); boşsa tüm vardiyalar")
+    shift: str | None = Field(default=None, description="Vardiya kodu (V1/V2) veya numarası (1-2); boşsa tüm vardiyalar")
     kpi: str = Field(description="KPI kodu (ör. PLANA_UYUM) veya adı")
     granularity: Literal["daily", "shift", "weekly"] = "daily"
 
