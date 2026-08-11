@@ -17,9 +17,6 @@ from app.services.synthetic.reference_data import ReferenceData
 
 FIXED_HOLIDAYS_MMDD = {(1, 1), (4, 23), (5, 1), (5, 19), (7, 15), (8, 30), (10, 29)}
 
-# Şirket ürün kataloğu (SAP malzeme master'ının sentetik karşılığı). Bilinçli olarak
-# iki üründe standart gramaj tanımlı bırakılmamıştır — bu ürünlere bağlı üretim
-# kayıtları için Ağır Gitme KPI'sı hesaplanmayacaktır (bkz. production_kpi_derivation.py).
 PRODUCT_CATALOG = [
     dict(code="MLZ-001", name="Yem Tipi A - 40gr Paket", standard_gram=40.0, tolerance_pct=0.05),
     dict(code="MLZ-002", name="Yem Tipi B - 25gr Paket", standard_gram=25.0, tolerance_pct=0.06),
@@ -114,9 +111,6 @@ def _build_plant_profiles(plants, rng: random.Random) -> dict:
 
 
 def _build_foreman_profiles(foremen, rng: random.Random) -> dict:
-    # Formenler arası kalıcı beceri farkı (bkz. KPI'lara özgü katsayılar aşağıda) — dar bir aralık
-    # günlük gürültü içinde kaybolup her formeni hedefin aynı tarafında bırakıyordu; bu aralık
-    # gerçek bir formen sıralaması (bazıları hedefin üstünde, bazıları altında) üretecek kadar geniş.
     return {f.id: {"skill": rng.uniform(-0.35, 0.35), "trend": rng.uniform(-0.0004, 0.0004)} for f in foremen}
 
 
@@ -172,11 +166,6 @@ def seed_production_data(
         if not foreman_assignments:
             continue
 
-        # Bir formenin tüm eşzamanlı atamaları (2-4 tesis) aynı vardiya çıpasını ve aynı tenure
-        # aralığını paylaşır (bkz. reference_data.py) — her atama kendi tesisi için ayrı
-        # günlük kayıt üretir (natural key'ler artık plant_id içeriyor, bkz. production.py).
-        # Gerçek günlük vardiya bu çıpadan haftalık olarak dönüşümlü hesaplanır (aşağıdaki
-        # gün döngüsünde `actual_shift_for_date` ile), çıpanın kendisi değil.
         tenure_start = foreman_assignments[0].start_date
         tenure_end = foreman_assignments[0].end_date
         range_start = max(tenure_start, period_start)
@@ -230,13 +219,7 @@ def seed_production_data(
                 )
                 pf = _clip(pf, -0.6, 0.45)
 
-                # Teknik + İmalat puanlamaya dahil edilir (spec bölüm 3.4/7); Diğer (format değişimi,
-                # temizlik, planlı bakım) puanlamaya hiç dahil edilmez — eski planned/unplanned ikilisi
-                # yerini bu üç bileşene bırakır (bkz. production_kpi_derivation.py).
                 downtime_multiplier = _clip(1.0 - pf * 1.4, 0.15, 3.2)
-                # Taban dakikalar İnkita hedefine (~%10) yakın oturacak şekilde ölçeklenir — eski
-                # düşük taban (18/12dk), gevşek hedefle birleşince downtime_multiplier ne olursa
-                # olsun herkesi hedefin rahatça altında bırakıyordu.
                 technical_minutes = max(0.0, 45.0 * downtime_multiplier + rng.gauss(0, 6))
                 manufacturing_minutes = max(0.0, 30.0 * downtime_multiplier + rng.gauss(0, 4))
                 other_minutes = max(0.0, rng.uniform(10, 25) + rng.gauss(0, 3))
@@ -257,9 +240,6 @@ def seed_production_data(
 
                 product = rng.choice(products)
                 gram_baseline = float(product.standard_gram) if product.standard_gram is not None else 35.0
-                # Katsayı (3.0 -> 5.5) ve taban (0.4 -> 1.4) formen becerisinin tolerans bandını
-                # (ürün başına ~%3-7) gerçekten aşıp aşmayacağını belirleyecek kadar güçlü —
-                # eskisi günlük gürültü içinde kaybolup herkesi bandın içinde bırakıyordu.
                 gram_overage = _clip(1.4 - pf * 5.5 + rng.gauss(0, 0.5), -1.2, 8.0)
                 measured_avg_gram = gram_baseline + gram_overage
                 gram_sample_count = rng.randint(15, 40)

@@ -10,9 +10,6 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# NOT: SQLAlchemy'nin Enum tipi, Python enum üyelerini varsayılan olarak `.value` değil
-# `.name` ile veritabanına yazar (bkz. action_plan_status migration'ı) — bu yüzden burada
-# app/models/enums.py'daki üye adları (büyük harf) kullanılıyor, `.value` küçük harfleri değil.
 CONTRIBUTION_WORK_TYPE = (
     'SMED', 'KAIZEN', 'PROBLEM_SOLVING', 'COST_REDUCTION', 'TIME_SAVING',
     'QUALITY_IMPROVEMENT', 'SAFETY_IMPROVEMENT', 'ENERGY_RESOURCE_SAVING',

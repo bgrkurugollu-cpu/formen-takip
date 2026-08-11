@@ -169,9 +169,6 @@ const PLAN_STATUS_COLOR: Record<"ABOVE_PLAN" | "BELOW_PLAN" | "ON_PLAN", string>
   ON_PLAN: "var(--text-primary)",
 };
 
-// Mevcut 5 seviyeli sınıflandırmanın (Kritik/Geliştirilmeli/İyi/Çok İyi/Mükemmel — bkz.
-// reference_data.py PERFORMANCE_LEVELS) Çok İyi ve Geliştirilmeli sınırları: KPI bazlı
-// güçlü/zayıf alan ayrımı için yeni bir eşik icat etmek yerine bu mevcut kesme noktaları kullanılır.
 const STRONG_SCORE_THRESHOLD = 90;
 const WEAK_SCORE_THRESHOLD = 80;
 
@@ -195,9 +192,6 @@ function kpiDeviation(k: ForemanKpiItem): number {
 
 function kpiInsightSentence(k: ForemanKpiItem, previous: ForemanKpiItem | undefined, tone: "strong" | "weak"): string {
   const deviation = kpiDeviation(k);
-  // "strong" gruptaki bir KPI'nın puanı 100'ün altında olsa bile (ör. Çok İyi bandı, 90-99.9)
-  // güçlü bir alan olarak listelenir — cümle bu durumda "hedefin altında" gibi çelişkili bir
-  // ifade kullanmamalı, çünkü tonun kendisi zaten hangi grupta gösterildiğini belirtiyor.
   const deviationText =
     tone === "strong"
       ? deviation >= 0

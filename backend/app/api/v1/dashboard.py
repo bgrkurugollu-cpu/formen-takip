@@ -239,10 +239,6 @@ def foreman_trend_ranking(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ) -> dict:
-    """Seçili dönem ile ondan hemen önceki eşit uzunluktaki dönem arasındaki skor
-    değişimine göre formenleri sıralar. Yalnızca her iki dönemde de veri bulunan
-    formenler dahil edilir — aksi halde yeni işe başlayan bir formen anlamsız
-    şekilde en büyük "gelişim" olarak görünür."""
     levels = get_performance_levels(db)
 
     period_days = (filters.date_to - filters.date_from).days + 1

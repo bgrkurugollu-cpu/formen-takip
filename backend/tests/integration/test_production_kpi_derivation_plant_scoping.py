@@ -39,9 +39,6 @@ def _cleanup(db, ids: dict) -> None:
 
 
 class TestWorkCalendarIsPlantScoped:
-    """Formen aynı gün bir tesiste çalışırken diğerinde izinli/devamsız olabilir (bkz.
-    `ForemanWorkCalendar`'ın `plant_id` içeren doğal anahtarı) — `derive_raw_performance_records`
-    bu ayrımı foreman+tarih değil foreman+tarih+tesis üçlüsüyle yapmalı."""
 
     def test_absent_at_one_plant_does_not_leak_into_its_production_record(self):
         db = SessionLocal()

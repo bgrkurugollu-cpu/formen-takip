@@ -10,8 +10,6 @@ from app.models.enums import AnalysisMode, AnomalyAnalysisStatus, AnomalySeverit
 
 
 class Anomaly(TimestampMixin, Base):
-    """Sentetik üretici tarafından oluşturulan ML tespiti kaydı.
-    """
 
     __tablename__ = "anomalies"
 
@@ -76,7 +74,6 @@ class AnomalyAnalysis(TimestampMixin, Base):
         Enum(AnomalyAnalysisStatus, name="anomaly_analysis_run_status"), nullable=False
     )
 
-    # tool_calling modunda LLM'in ürettiği, kullanıcıya gösterilmeyen kısa iç araştırma planı.
     investigation_plan: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -103,7 +100,7 @@ class AnomalyToolCall(TimestampMixin, Base):
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
     arguments: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
-    status: Mapped[str] = mapped_column(String(20), nullable=False)  # success | error | timeout
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     record_count: Mapped[int | None] = mapped_column(nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)

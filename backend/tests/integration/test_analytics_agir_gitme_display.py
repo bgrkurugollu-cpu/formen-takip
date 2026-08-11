@@ -53,9 +53,6 @@ def _make_record(plant, chief, shift, foreman, kpi, performance_date, actual_val
 
 
 class TestAgirGitmeDisplayMatchesScoreDirection:
-    """+/- eşit büyüklükte sapmalar ekranda (avg_actual) birbirini götürmemeli — aksi halde
-    gerçek puan (score_heavy_weight_from_period_ratio, |actual|/target bazlı) kötüyken ekranda
-    ~0 sapma (mükemmel) görünürdü. Bkz. analytics.py::_agir_gitme_avg_actual."""
 
     def test_kpi_breakdown_avg_actual_reflects_absolute_not_net_deviation(self):
         db = SessionLocal()
@@ -78,10 +75,7 @@ class TestAgirGitmeDisplayMatchesScoreDirection:
             breakdown = analytics.kpi_breakdown(db, filters, foreman_id=foreman.id)
             entry = next(e for e in breakdown if e["kpi_id"] == kpi.id)
 
-            # Net (eski) hesap ~0 verirdi (+8 ve -8 birbirini götürür); mutlak/ağırlıklı hesap 8 vermeli.
             assert entry["avg_actual"] == 8.0
-            # Gerçek puan zaten mutlak sapma bazlı hesaplanıyordu (score_heavy_weight_from_period_ratio) —
-            # şimdi ekrandaki sayı da onunla aynı yönü (kötü/yüksek sapma) gösteriyor.
             assert entry["avg_capped_score"] < 100.0
         finally:
             db.rollback()

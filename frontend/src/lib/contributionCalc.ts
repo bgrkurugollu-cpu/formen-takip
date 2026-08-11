@@ -17,7 +17,6 @@ export function durationToMinutes(value: number | null | undefined, unit: Contri
   return Math.round(value * MINUTES_PER_UNIT[unit] * 10000) / 10000;
 }
 
-/** Önceki - yeni süre; yeni süre öncekinden büyük/eşitse kazanç yok (null döner). */
 export function computeTimeSaving(previousDuration: number | null | undefined, newDuration: number | null | undefined): number | null {
   if (previousDuration == null || newDuration == null) return null;
   if (newDuration >= previousDuration) return null;
@@ -33,7 +32,6 @@ export function computeMonthlyTotal(
   return Math.round(perOccurrenceMinutes * repeatCount * OCCURRENCES_PER_MONTH[repeatPeriod] * 100) / 100;
 }
 
-/** (değişim miktarı, değişim yüzdesi). previous null/0 ise yüzde null döner. */
 export function computeChange(
   previous: number | null | undefined, next: number | null | undefined
 ): { amount: number | null; percent: number | null } {

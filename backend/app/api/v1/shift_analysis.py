@@ -92,10 +92,6 @@ def _summary_to_dict(summary: shift_analysis.ShiftAnomalySummary) -> dict:
 
 @router.get("/cards")
 def get_cards(filters: dict = Depends(_cards_filters), db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
-    # `summary`, `cards`'ın kendisi üzerinden hesaplanan salt bir toplulaştırmadır (bkz.
-    # build_summary) — ayrı bir /summary endpoint'i olarak tutulursa, sayfa aynı ay/filtre
-    # için TÜM ağır işi (build_cards: aylık ham kayıt çekme + tesis/vardiya/KPI hücrelerine
-    # gruplama + her hücrede en iyi/kötü karşılaştırma) iki ayrı istekte iki kez yapardı.
     month_start, month_end = _resolve_period(filters["month"])
     cards = shift_analysis.build_cards(
         db, month_start, month_end,

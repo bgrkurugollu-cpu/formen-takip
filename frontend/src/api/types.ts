@@ -658,7 +658,6 @@ export interface ContributionSummary {
   standardized_ratio: number;
 }
 
-// --- Tespitler (Anomalies) ---
 
 export type AnomalySeverity = "low" | "medium" | "high" | "critical";
 export type AnomalyStatus = "new" | "in_review" | "action_pending" | "resolved" | "closed";
@@ -862,7 +861,6 @@ export interface AnomalySummary {
   resolved_count: number;
 }
 
-// --- Vardiya Analizi ---
 
 export type ShiftAnomalySeverity = "medium" | "high";
 
@@ -944,7 +942,6 @@ export interface ShiftAnomalyDetail extends ShiftAnomalyCard {
   is_recurring_pattern: boolean;
 }
 
-// --- Vardiya Anomali Heatmap ---
 
 export type HeatmapLevel = "no_data" | "normal" | "attention" | "significant" | "critical";
 
@@ -994,7 +991,6 @@ export interface ShiftHeatmapResponse {
   summary: ShiftHeatmapSummary;
 }
 
-// --- Formen-Vardiya Karşılaştırma Matrisi ---
 
 export interface ForemanShiftMatrixCell {
   avg_actual: number;

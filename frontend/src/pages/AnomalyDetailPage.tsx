@@ -111,8 +111,6 @@ export function AnomalyDetailPage() {
     if (isBusy) return;
     setActionError(null);
     const mutation = endpoint === "analyze" ? analyzeMutation : reanalyzeMutation;
-    // Butona her tıklama kullanıcının açık isteğidir — seçili mod, önbellekteki sonuçtan
-    // farklı olabileceği için (ör. moda geçiş sonrası "Analizi Yenile") her zaman yeniden çalıştır.
     mutation.mutate(
       { id: a.id, mode: selectedMode, force_refresh: true },
       { onError: () => setActionError("Yapay zekâ analizi oluşturulamadı. Daha sonra yeniden deneyebilirsiniz.") }
@@ -136,7 +134,6 @@ export function AnomalyDetailPage() {
         Tespitler
       </button>
 
-      {/* Tespit özeti */}
       <div className="rounded-lg p-6" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderTop: "3px solid var(--accent)" }}>
         <div className="flex flex-wrap items-center gap-2">
           <SeverityBadge severity={a.severity} />
@@ -165,7 +162,6 @@ export function AnomalyDetailPage() {
         </div>
       </div>
 
-      {/* Sayısal veriler */}
       <SectionCard title="Sayısal Veriler">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile label="Gözlenen Değer" value={`%${a.observed_value.toFixed(1)}`} />
@@ -179,17 +175,14 @@ export function AnomalyDetailPage() {
         </div>
       </SectionCard>
 
-      {/* KPI trendi */}
       <SectionCard title="İlgili KPI Trendi">
         <AnomalyTrendChart points={a.daily_history} expectedValue={a.expected_value} />
       </SectionCard>
 
-      {/* Vardiya karşılaştırması */}
       <SectionCard title="Vardiya Karşılaştırması">
         <AnomalyComparisonChart items={comparisonBars} />
       </SectionCard>
 
-      {/* İlişkili KPI değişimleri */}
       <SectionCard title="İlişkili KPI Değişimleri">
         {a.related_signals.length === 0 && <EmptyState message="İlişkili KPI sinyali bulunamadı." />}
         {a.related_signals.length > 0 && (
@@ -207,7 +200,6 @@ export function AnomalyDetailPage() {
         )}
       </SectionCard>
 
-      {/* ML tespit bilgileri */}
       <SectionCard title="ML Tespit Bilgileri">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile label="Tespit Türü" value={a.anomaly_type_label} />
@@ -222,7 +214,6 @@ export function AnomalyDetailPage() {
         )}
       </SectionCard>
 
-      {/* Yapay zekâ analizi */}
       <Card
         title="Yapay Zekâ Analizi"
         action={
@@ -487,7 +478,6 @@ export function AnomalyDetailPage() {
               {result.disclaimer}
             </p>
 
-            {/* Analiz kaynağı ve zamanı */}
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               Analiz kaynağı: {latest.model} · Başlangıç: {latest.started_at.replace("T", " ").slice(0, 19)}
               {latest.completed_at && ` · Bitiş: ${latest.completed_at.replace("T", " ").slice(0, 19)}`}
@@ -496,7 +486,6 @@ export function AnomalyDetailPage() {
         )}
       </Card>
 
-      {/* Analiz Adımları (tool_calling geçmişi) */}
       {latest && latest.mode === "tool_calling" && (
         <Card title="Analiz Adımları">
           {toolCalls.isLoading && <LoadingState label="Adımlar yükleniyor..." />}

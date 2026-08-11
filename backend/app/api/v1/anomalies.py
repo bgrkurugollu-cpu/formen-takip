@@ -210,9 +210,6 @@ def list_anomalies(
 
     total = db.scalar(select(func.count()).select_from(query.subquery()))
 
-    # `id` ikincil sıralama anahtarı olarak eklenir: `detected_at` eşit olan satırlarda tek
-    # başına DESC sıralama sayfa 1/sayfa 2 arasında (ayrı SQL sorguları olduğundan) tutarsız
-    # sıra üretebilir — aynı satır iki sayfada birden görünebilir ya da hiç görünmeyebilir.
     query = (
         query.order_by(Anomaly.detected_at.desc(), Anomaly.id)
         .offset((page.page - 1) * page.page_size).limit(page.page_size)

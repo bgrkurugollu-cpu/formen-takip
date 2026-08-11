@@ -23,26 +23,12 @@ TR_MONTHS = [
 ]
 
 
-# Vardiya Analizi sayfasının anomali eşikleri — tek yerde tutulan, kolayca ayarlanabilir
-# sabitler (bkz. anomaly_kpi_defs.py'deki KPI_DEFINITIONS ile aynı desen). DB'ye taşınmadı
-# çünkü bu sayfa DB'ye hiçbir şey yazmıyor, tamamen istek anında hesaplanıyor (spec: "yönetime
-# anlamlı içgörü" — akademik bir istatistik modeli değil).
 @dataclass(frozen=True)
 class ShiftAnomalyThresholds:
     medium_pct: float = 8.0
     high_pct: float = 15.0
-    # Bir formen tarafının o ay/vardiya/tesis/KPI hücresinde anlamlı sayılması için gereken
-    # asgari kayıt sayısı — çok az veri üzerinden "anomali" etiketlemeyi engeller.
     min_records_per_side: int = 4
-    # Yüzdesel eşiğe EK OLARAK aranan asgari mutlak fark (yüzde puanı cinsinden — tüm KPI'ların
-    # birimi "%"). Ağır Gitme/GSF/Iskarta/İnkita gibi ideal değeri sıfıra yakın KPI'larda iki
-    # tarafın da neredeyse sıfır olduğu durumlarda (ör. %0.04 vs %0.43) yüzdesel fark kolayca
-    # eşiği geçer ama mutlak fark yönetim için anlamsız kalır — bu taban, gerçekten önemsiz
-    # sapmaların kart listesini gürültüyle doldurmasını engeller.
     min_abs_diff_points: float = 1.0
-    # Yalnızca heatmap sınıflandırmasında kullanılan 4. eşik (bkz. classify_diff_level) —
-    # medium_pct/high_pct'in üstüne "kritik" katmanını ekler. Kart listesi (severity: medium/high)
-    # bu alanı hiç kullanmaz, geriye dönük davranış değişmez.
     critical_pct: float = 25.0
 
 
@@ -60,8 +46,6 @@ def previous_completed_month(today: date) -> tuple[date, date]:
 
 
 def _week_index(d: date) -> int:
-    """Formen rotasyonuyla aynı hafta sınırlarını kullanır (bkz. shift_rotation.py) — bu sayede
-    bir hafta bucket'ı içinde hangi formenin hangi fiziksel vardiyada olduğu asla değişmez."""
     return (d - ROTATION_EPOCH).days // 7
 
 
@@ -144,18 +128,10 @@ class PairComparison:
     worse: ForemanCellStat
     abs_diff: float
     pct_diff: float
-    severity: str  # "medium" | "high"
+    severity: str
 
 
 def _extreme_pair(stats: list[ForemanCellStat], thresholds: ShiftAnomalyThresholds) -> tuple[ForemanCellStat, ForemanCellStat] | None:
-    """Bir hücrede (tesis/vardiya/KPI) normalde tam olarak 2 formen bulunur (zon başına 2
-    formen, haftalık dönüşümle her ikisi de her iki fiziksel vardiyada görünür). Ama personel
-    değişikliği (işten çıkış/yeni işe alım) aynı ay içine denk gelirse 3+ farklı formen aynı
-    hücrede kayıt bırakabilir — kayıt sayısına göre "ilk iki"yi almak (eski davranış) o durumda
-    hangi ikisinin karşılaştırılacağını rastgele/ilgisiz bir kritere (hacim) bırakırdı ve asıl
-    en büyük farkı (en iyi/en kötü performans) sessizce kaçırabilirdi. Bunun yerine, anlamlı
-    sayıda kaydı olan (min_records_per_side) adaylar arasından değere göre en uç ikisi seçilir —
-    yalnızca 2 aday varken (asıl/beklenen durum) davranış değişmez."""
     qualifying = [s for s in stats if s.record_count >= thresholds.min_records_per_side]
     if len(qualifying) < 2:
         return None
@@ -175,12 +151,6 @@ def _compare_pair(
         better, worse = (a, b) if a.avg_actual <= b.avg_actual else (b, a)
 
     abs_diff = abs(better.avg_actual - worse.avg_actual)
-    # Yüzdesel farkın tabanı olarak KÜÇÜK tarafın kendisi DEĞİL, iki değerin ORTALAMASI kullanılır.
-    # Ağır Gitme/GSF/Iskarta/İnkita gibi "düşük değer iyi" KPI'larda ideal değer sıfıra çok yakındır
-    # (ör. 0.01 vs 4.04) — küçük tarafı taban almak orada yüzdesel farkı binlerce yüzdeye
-    # şişirerek kartı anlamsız kılar. Ortalamayı taban almak her iki yönde de (küçük/büyük fark)
-    # simetrik ve sayısal olarak kararlıdır; yalnızca iki taraf da tam sıfırsa (zaten fark da
-    # sıfır demektir) tanımsız kalır.
     base = (abs(a.avg_actual) + abs(b.avg_actual)) / 2.0
     if base == 0:
         return None
@@ -197,17 +167,12 @@ def _compare_pair(
     return PairComparison(better=better, worse=worse, abs_diff=abs_diff, pct_diff=pct_diff, severity=severity)
 
 
-HeatmapLevel = str  # "no_data" | "normal" | "attention" | "significant" | "critical"
+HeatmapLevel = str
 
 
 def classify_diff_level(
     a: ForemanCellStat | None, b: ForemanCellStat | None, thresholds: ShiftAnomalyThresholds,
 ) -> tuple[HeatmapLevel, float | None, float | None]:
-    """Heatmap hücresi sınıflandırması — `_compare_pair` ile aynı normalize edilmiş fark mantığını
-    (ortalamaya göre yüzdesel fark + mutlak fark tabanı) paylaşır, ama kart listesinin aksine eşiğin
-    ALTINDA kalan hücreleri de "normal" olarak döner (kart listesi onları basitçe atlar) — heatmap'in
-    amacı yalnızca anomalileri değil, TÜM tesis×KPI matrisini taramak. `min_records_per_side`'ı
-    karşılamayan ya da hiç veri olmayan taraf(lar) "no_data" (gri) döner."""
     if a is None or b is None or a.record_count < thresholds.min_records_per_side or b.record_count < thresholds.min_records_per_side:
         return "no_data", None, None
 
@@ -249,7 +214,7 @@ class HeatmapCell:
     plant_id: UUID
     kpi_id: UUID
     level: HeatmapLevel
-    v1: ForemanCellStat | None  # shift_id alanı yerine burada .foreman_id vardiya ID'sini taşır
+    v1: ForemanCellStat | None
     v2: ForemanCellStat | None
     abs_diff: float | None
     pct_diff: float | None
@@ -261,12 +226,6 @@ def build_heatmap(
     plant_ids: list[UUID] | None = None, factory_ids: list[UUID] | None = None,
     kpi_ids: list[UUID] | None = None, thresholds: ShiftAnomalyThresholds = DEFAULT_THRESHOLDS,
 ) -> tuple[list[HeatmapPlantRef], list[HeatmapKpiRef], list[HeatmapCell]]:
-    """Tesis × KPI ızgarası: her hücre, o tesiste/KPI'da V1 ile V2 vardiyasının (formen ayrımı
-    olmadan, ikisinin de o vardiyadaki TÜM kayıtları birleştirilerek) toplam ortalaması arasındaki
-    farkı sınıflandırır. Kart listesindeki (build_cards) formen-çifti karşılaştırmasından farklıdır:
-    heatmap "vardiya mı formen mi" sorusunu SORMAZ, yalnızca "bu tesis/KPI'da vardiyalar arasında
-    anlamlı bir fark var mı" sorusuna hızlı bir tarama sağlar — vardiya filtresi bu yüzden burada
-    uygulanmaz (matris zaten V1-vs-V2 karşılaştırmasıdır)."""
     rows = _fetch_raw_rows(db, month_start, month_end, plant_ids=plant_ids, factory_ids=factory_ids, kpi_ids=kpi_ids)
 
     shifts_by_id = {s.id: s for s in db.scalars(select(Shift))}
@@ -383,7 +342,7 @@ class ForemanShiftRow:
     foreman_id: UUID
     name: str
     employee_number: str
-    cells: dict[UUID, ForemanShiftCell]  # shift_id -> hücre
+    cells: dict[UUID, ForemanShiftCell]
 
 
 @dataclass
@@ -400,10 +359,6 @@ class ForemanShiftMatrix:
 
 
 def _shift_diff_classification(a: float, b: float, thresholds: ShiftAnomalyThresholds) -> HeatmapLevel:
-    """`classify_diff_level` ile aynı normalize fark formülünü iki çıplak değere (kayıt sayısı
-    kontrolü olmadan — bu fonksiyonun çağrıldığı noktada iki hücre de zaten mevcut/hesaplanmış
-    olur) uygulayan yardımcı; 2×2 karşılaştırma özetinde (formen içi ve formen arası fark) tekrar
-    kullanılır."""
     abs_diff = abs(a - b)
     base = (abs(a) + abs(b)) / 2.0
     if base == 0 or abs_diff < thresholds.min_abs_diff_points:
@@ -466,10 +421,6 @@ def _build_matrix_insight(shifts: list[Shift], rows: list[ForemanShiftRow], thre
 def build_foreman_shift_matrix(
     db: Session, filters: Filters, plant_id: UUID, kpi_id: UUID, thresholds: ShiftAnomalyThresholds = DEFAULT_THRESHOLDS,
 ) -> ForemanShiftMatrix | None:
-    """Bir tesis+KPI için 2×2 formen-vardiya karşılaştırması. Puanlama, mevcut `analytics` modülünün
-    KPI'a özel formüllerini (Ağır Gitme/Plana Uyum dahil) DOĞRUDAN kullanır — burada ayrı bir
-    hesaplama mantığı icat edilmez, yalnızca `analytics.foreman_kpi_values` her vardiya için ayrı
-    filtrelerle iki kez çağrılır."""
     kpi = db.get(Kpi, kpi_id)
     if kpi is None or not kpi.is_active:
         return None

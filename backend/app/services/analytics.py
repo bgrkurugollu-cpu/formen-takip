@@ -61,10 +61,6 @@ def _apply_filters(stmt: Select, filters: Filters) -> Select:
 
 
 def active_kpi_weight_sum(db: Session, filters: Filters | None = None) -> float:
-    """Kapsanan ağırlık oranının (bkz. MIN_COVERED_WEIGHT_RATIO) payda tarafı. `filters.kpi_ids`
-    doluysa (kullanıcı KPI filtresi seçtiyse) yalnızca seçili KPI'ların ağırlığı toplam sayılır —
-    aksi halde "GSF" gibi tek bir KPI'ya filtrelemek, kapsanan ağırlığı hep %100'ün altında
-    göstererek genel puanı hep 0'a düşürürdü (filtre dışı kalan KPI'lar zaten hiç veri döndürmez)."""
     stmt = select(func.sum(Kpi.weight)).where(Kpi.is_active.is_(True))
     if filters is not None and filters.kpi_ids:
         stmt = stmt.where(Kpi.id.in_(filters.kpi_ids))
@@ -80,13 +76,6 @@ def _active_rules(db: Session) -> dict[UUID, KpiCalculationRule]:
     return {r.kpi_id: r for r in db.scalars(select(KpiCalculationRule).where(KpiCalculationRule.is_active.is_(True)))}
 
 
-# ---------------------------------------------------------------------------------------------
-# Dönemsel toplulaştırma (spec bölüm 11): önce ham pay/payda toplanır, ardından KPI'a özel formüle
-# TEK SEFERDE gönderilir — günlük puanların ortalaması hiçbir yerde alınmaz. Her yardımcı fonksiyon
-# `group_col=None` ile tek bir toplam satır (ör. tekil bir formen için KPI kartı), bir SQL ifadesiyle
-# de (foreman_id, plant_id, date_trunc(...) vb.) grup başına satır döndürebilir — bu sayede
-# plant/foreman/chief/shift/trend kırılımlarının hepsi aynı koddan beslenir.
-# ---------------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -132,9 +121,6 @@ def _kpi_period_stats(
 def _agir_gitme_period_ratio(
     db: Session, filters: Filters, group_col, kpi_id: UUID, extra_where: list | None = None
 ) -> dict:
-    """Üretim ağırlıklı oran (spec bölüm 11.4): sum(denominator * abs(actual)/target) / sum(denominator).
-    Payda (denominator_value) her zaman pozitiftir (standart gramaj x üretim miktarı) — işaretli
-    numerator burada kullanılmaz, yalnızca oranın büyüklüğü ağırlıklandırılır."""
     ratio_expr = func.abs(PerformanceRecord.actual_value) / PerformanceRecord.target_value
     cols = [
         func.sum(PerformanceRecord.denominator_value * ratio_expr).label("weighted_ratio_sum"),
@@ -162,13 +148,6 @@ def _agir_gitme_period_ratio(
 def _agir_gitme_avg_actual(
     db: Session, filters: Filters, group_col, kpi_id: UUID, extra_where: list | None = None
 ) -> dict:
-    """AGIR_GITME için EKRANDA gösterilen "gerçekleşen" — `_agir_gitme_period_ratio` ile AYNI
-    temeli (|actual_value|, denominator ile ağırlıklı) paylaşır, yalnızca target'a bölünmeden
-    doğrudan yüzde olarak döner. `numerator_sum/denominator_sum*100` (naif net ortalama)
-    KULLANILMAZ: eşit büyüklükte +/- sapma günleri orada birbirini götürüp ekranda ~0 (mükemmel)
-    gösterirken, gerçek puan (yukarıdaki fonksiyon → `score_heavy_weight_from_period_ratio`) her
-    ikisini de kötü sayar — ekran ile puan farklı tanımlar kullanınca "sıfıra yakın ortalama, iki
-    ayrı kötü sapma" tutarsızlığı doğardı (bkz. kpi_breakdown/foreman_kpi_values kullanımı)."""
     cols = [
         func.sum(PerformanceRecord.denominator_value * func.abs(PerformanceRecord.actual_value)).label("weighted_abs_sum"),
         func.sum(PerformanceRecord.denominator_value).label("denominator_sum"),
@@ -195,7 +174,6 @@ def _agir_gitme_avg_actual(
 def _plana_uyum_period_deviation(
     db: Session, filters: Filters, group_col, kpi_id: UUID, extra_where: list | None = None
 ) -> dict:
-    """Mutlak sapmaların toplamı (spec bölüm 11.5, birbirini götürmeyen): sum(abs(fiili - plan)) / sum(plan) * 100."""
     cols = [
         func.sum(func.abs(PerformanceRecord.numerator_value - PerformanceRecord.denominator_value)).label("abs_dev_sum"),
         func.sum(PerformanceRecord.denominator_value).label("denominator_sum"),
@@ -222,15 +200,6 @@ def _plana_uyum_period_deviation(
 def _plana_uyum_period_score_v3(
     db: Session, filters: Filters, group_col, kpi_id: UUID, params: dict, extra_where: list | None = None
 ) -> dict:
-    """Plana Uyum v3 (asimetrik, formula_type="ASYMMETRIC_PLAN_ACHIEVEMENT") dönemsel puanı: ÖNCE
-    her kayıt kendi (planlanan, fiili) çiftiyle AYRI AYRI puanlanır, SONRA planlanan miktarla
-    ağırlıklandırılmış ortalaması alınır. Toplam fiili/toplam planlanandan TEK bir net sapma
-    hesaplayıp bir kez puanlamak (matematiksel olarak buna eşdeğer: ağırlıklı sapma ortalaması =
-    (Σaktüel-Σplanlanan)/Σplanlanan) tercih EDİLMEDİ — her performance_record bağımsız bir
-    planlanan üretim koşusunu (tesis/hat/ürün/gün) temsil ediyor ve böyle bir netleme, bir
-    hattaki fazla üretimin ilgisiz başka bir hattaki eksik üretimi birebir telafi etmesine izin
-    verirdi. Kayıt bazlı puanlama + ağırlıklı ortalama, asimetrik cezayı (plan altı daha güçlü
-    cezalandırılır) her bağımsız koşuda korur."""
     cols = [PerformanceRecord.numerator_value, PerformanceRecord.denominator_value]
     if group_col is not None:
         cols = [group_col.label("key")] + cols
@@ -261,10 +230,6 @@ def _plana_uyum_period_score_v3(
 def _kpi_period_scores(
     db: Session, filters: Filters, group_col, kpi: Kpi, rule: KpiCalculationRule | None, extra_where: list | None = None
 ) -> dict:
-    """Bir KPI için grup başına (ScoreResult, _KpiPeriodStats) döner. Ağır Gitme/Plana Uyum kendi
-    özel toplulaştırmalarını kullanır; GSF/Iskarta/İnkita (ve gelecekteki her ratio-vs-target
-    custom KPI) ortak sum/sum-vs-ağırlıklı-hedef desenini paylaşır — hepsi aynı KPI'a özel
-    formülleri (kpi_engine.py) çağırır, günlük skorların ortalaması hiçbir zaman alınmaz."""
     stats_by_key = _kpi_period_stats(db, filters, group_col, kpi.id, extra_where=extra_where)
     stats_by_key = {k: s for k, s in stats_by_key.items() if s.denominator_sum > 0}
     if not stats_by_key:
@@ -289,9 +254,6 @@ def _kpi_period_scores(
                 key: (ScoreResult(raw_score=score_by_key[key], capped_score=score_by_key[key]), stats)
                 for key, stats in stats_by_key.items() if key in score_by_key
             }
-        # v1/v2 (formula_type="PIECEWISE_LINEAR_LOGARITHMIC") — artık aktif kural olarak
-        # kullanılmıyor (bkz. kpi_calculation_rules version geçmişi) ama tarihsel/downgrade
-        # senaryosu için kasıtlı olarak kaldırılmadı.
         dev_by_key = _plana_uyum_period_deviation(db, filters, group_col, kpi.id, extra_where=extra_where)
         limit = params.get("normal_deviation_limit", 5.0)
         coef = params.get("excess_deviation_coefficient", 10.0)
@@ -334,8 +296,6 @@ def _grouped_scores(
         components = [(score, weight) for score, weight, _ in items]
         covered_weight = sum(weight for _, weight, _ in items)
         record_count = sum(count for _, _, count in items)
-        # Kapsanan ağırlık toplam ağırlığın yarısının altındaysa genel puan üretilmez (spec bölüm 10:
-        # "eksik KPI sayısı izin verilen sınırı aşarsa genel puan üretme") — bkz. MIN_COVERED_WEIGHT_RATIO.
         insufficient = covered_weight < (total_active_weight * MIN_COVERED_WEIGHT_RATIO)
         is_reliable = (not insufficient) and covered_weight >= (total_active_weight - WEIGHT_TOLERANCE)
         total_score = 0.0 if insufficient else weighted_geometric_score(components)
@@ -379,9 +339,6 @@ class ChiefTeamScore:
 
 
 def chief_team_scores(db: Session, filters: Filters) -> list[ChiefTeamScore]:
-    """Şef ekip puanı: formen puanlarının ortalaması DEĞİL, şefin sorumluluğundaki tüm
-    kayıtların toplam pay/paydasından doğrudan yeniden hesaplanan tek bir puan. Formen
-    kırılımı (foreman_scores) ayrıca, her formenin kendi doğru puanıyla sağlanır."""
     chief_scores_by_id = {s.key: s for s in chief_scores(db, filters)}
     foreman_scores_by_id = {s.key: s for s in foreman_scores(db, filters)}
 
@@ -500,18 +457,6 @@ class ForemanKpiValue:
 
 
 def _point_score(kpi: Kpi, rule: KpiCalculationRule | None, actual: float, target: float) -> float:
-    """Bir (gerçekleşen, hedef) çiftine, o KPI'nın gerçek formülü DOĞRUDAN uygulanarak hesaplanan
-    puan. Formen kırılımı grafiğinde tüm noktalar `reference_target`'a (tek yatay çizgi) göre
-    puanlanır — her formen kendi hedefine göre puanlansaydı, çizgiye yakın duran bir nokta yine de
-    kendi (farklı) hedefine göre kırmızı görünebilirdi (bkz. `foreman_kpi_values` docstring'i).
-
-    Girdi `actual`, KPI'a göre değişir: Ağır Gitme için artık gerçek puanla (bkz.
-    `_agir_gitme_avg_actual` → `score_heavy_weight_from_period_ratio`) AYNI mutlak/ağırlıklı
-    temeli paylaşır. Plana Uyum'da ise hâlâ net (numerator_sum/denominator_sum) bir ortalamadır —
-    gerçek puanı (`_plana_uyum_period_score_v3`) KAYIT BAZINDA ayrı ayrı puanlayıp SONRA ağırlıklı
-    ortalamasını alır (asimetrik ceza her koşuda korunsun diye, bkz. o fonksiyonun docstring'i);
-    bu, tek bir (actual, target) çiftine geri döndürülemeyen bir toplulaştırmadır, bu yüzden Plana
-    Uyum noktalarının rengi gerçek dönem puanıyla hâlâ tam örtüşmeyebilir."""
     params: dict = (rule.parameters if rule else {}) or {}
     if kpi.calculation_type == CalculationType.CUSTOM_FORMULA:
         formula_type = params.get("formula_type")
@@ -533,20 +478,8 @@ def _point_score(kpi: Kpi, rule: KpiCalculationRule | None, actual: float, targe
 
 
 def foreman_kpi_values(db: Session, filters: Filters, kpi: Kpi, reference_target: float) -> list[ForemanKpiValue]:
-    """Tek bir KPI için formen kırılımında (gerçekleşen, hedef, puan) — `kpi_breakdown`'ın
-    formen bazında tersi: orada tek formen için tüm KPI'lar, burada tek KPI için tüm formenler.
-
-    `reference_target`: puan (dolayısıyla renk/seviye), her formenin kendi hedefine göre DEĞİL,
-    grafikte tek bir yatay çizgi olarak çizilen `reference_target`'a (şirket ortalama hedefi) göre
-    hesaplanır — foremenler farklı tesislere atandığı için PLANT-seviyeli hedefler birbirinden
-    belirgin şekilde ayrışabiliyor (bkz. kpi_targets); her nokta kendi hedefine göre puanlanırsa,
-    ekranda görünen TEK ortalama çizgiye göre "yakın" duran bir nokta yine de kırmızı görünebilir.
-    `avg_target` (formenin kendi ortalama hedefi) yine de bilgi amaçlı döndürülür."""
     rule = _active_rules(db).get(kpi.id)
     stats_by_foreman = _kpi_period_stats(db, filters, PerformanceRecord.foreman_id, kpi.id)
-    # AGIR_GITME için net (işaretli) numerator_sum/denominator_sum yerine mutlak/ağırlıklı ortalama
-    # kullanılır — aksi halde eşit büyüklükte +/- sapması olan bir formen ekranda ~hedef (yeşil)
-    # görünürken gerçek puanı (aşağıdaki _point_score de dahil, aynı bu değeri kullanır) kötü olurdu.
     agir_gitme_actual_by_foreman = (
         _agir_gitme_avg_actual(db, filters, PerformanceRecord.foreman_id, kpi.id)
         if kpi.code == "AGIR_GITME" else {}

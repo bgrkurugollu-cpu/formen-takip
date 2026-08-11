@@ -1,10 +1,3 @@
-"""add foreman_monthly_reports
-
-Revision ID: a8e2c4f6b1d3
-Revises: c9e2a4f6b8d0
-Create Date: 2026-08-10 00:00:00.000000
-
-"""
 from typing import Sequence, Union
 
 from alembic import op

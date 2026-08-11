@@ -56,8 +56,6 @@ class TestCompareToReference:
         assert result["is_favorable"] is False
 
     def test_lower_is_better_below_target_is_favorable(self):
-        """GSF/İnkita/Iskarta/Ağır Gitme gibi düşük değerin iyi olduğu KPI'larda, gerçekleşen
-        hedefin altındaysa bu OLUMLU sayılmalı — yüksek=iyi varsayımı yapılmamalı."""
         result = _compare_to_reference(actual=0.5, reference=0.8, success_direction_higher=False)
         assert result["status"] == "below"
         assert result["is_favorable"] is True

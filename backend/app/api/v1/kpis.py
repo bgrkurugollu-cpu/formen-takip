@@ -81,15 +81,6 @@ def kpi_analysis(
 
     trend = analytics.trend(db, filters, "week")
 
-    # Formen noktalarının hedef çizgisine göre 3'e ayrılması (iyi/hedefe yakın/kötü) artık PUAN
-    # bandından değil, hedefe YÜZDESEL yakınlıktan belirlenir. Skor bandına göre bantlama (önceki
-    # yaklaşım) her KPI'nın formülünün hedef çevresindeki farklı dikliğine bağlı kalıyordu — ör.
-    # Iskarta çok dik olduğundan "yakın" bandı hedefin yalnızca birkaç yüzde üstünü kapsarken,
-    # Ağır Gitme çok yumuşak olduğundan hedeften %40+ uzaktaki noktalar bile "yeşil" (iyi)
-    # görünüyor, buna karşın daha YAKIN noktalar "sarı" kalabiliyordu — tutarsız ve bazen tersine
-    # dönen bir görünüm. Tolerans dışında kalan noktalar için yön hâlâ gerçek KPI formülünün
-    # ürettiği puana (>=100 mü, değil mi) göre belirlenir — puan bandı yalnızca ayrıca gösterilen
-    # "Seviye" rozeti (Mükemmel/Çok İyi/...) için kullanılmaya devam eder.
     NEAR_TARGET_TOLERANCE_PCT = 10.0
     levels = get_performance_levels(db)
 

@@ -46,10 +46,6 @@ def _delete_test_records(db, source_record_ids: list[str]) -> None:
 
 
 def _earliest_real_production_date(db):
-    """Sentetik üretici yalnızca `production_records`'daki en erken tarihten itibaren gerçek
-    veri üretir — bu tarihten önce seçilen bir `performance_date`, aynı formen/tesis/vardiya
-    kombinasyonu için gerçek veriyle çakışamaz (doğal anahtar çakışması riski olmadan test
-    edilebilir), ama yine de atamanın `start_date`'i içinde kalabilir (aşağıya bkz.)."""
     return db.scalar(select(func.min(ProductionRecord.production_date)))
 
 
@@ -65,9 +61,6 @@ def _pick_existing_entities(db):
     foreman = db.get(Foreman, assignment.foreman_id)
     anchor_shift = db.get(Shift, assignment.shift_id)
     all_shifts = list(db.scalars(select(Shift)))
-    # PLANA_UYUM'un skorlama formülü (ASYMMETRIC_PLAN_ACHIEVEMENT) numerator/denominator
-    # gerektirir; bu testler natural-key/atama davranışını doğruluyor, KPI formülünü değil —
-    # bu yüzden actual/target üzerinden skorlanan sıradan bir KPI (GSF) kullanılır.
     kpi = db.scalar(select(Kpi).where(Kpi.code == "GSF"))
     as_of = assignment.start_date + timedelta(days=1)
     shift = actual_shift_for_date(as_of, anchor_shift, all_shifts)
@@ -75,8 +68,6 @@ def _pick_existing_entities(db):
 
 
 def _pick_multi_plant_foreman(db):
-    """Formen + iki farklı tesis: aynı foreman/chief/shift'e bağlı, aynı anda aktif en az
-    2 ForemanAssignment satırı olan bir formen (bkz. 2-4 eşzamanlı tesis ataması)."""
     earliest_production = _earliest_real_production_date(db)
     foreman_id = db.scalar(
         select(ForemanAssignment.foreman_id)
@@ -99,9 +90,6 @@ def _pick_multi_plant_foreman(db):
     anchor_shift = db.get(Shift, assignments[0].shift_id)
     all_shifts = list(db.scalars(select(Shift)))
     plants = [db.get(Plant, a.plant_id) for a in assignments[:2]]
-    # PLANA_UYUM'un skorlama formülü (ASYMMETRIC_PLAN_ACHIEVEMENT) numerator/denominator
-    # gerektirir; bu testler natural-key/atama davranışını doğruluyor, KPI formülünü değil —
-    # bu yüzden actual/target üzerinden skorlanan sıradan bir KPI (GSF) kullanılır.
     kpi = db.scalar(select(Kpi).where(Kpi.code == "GSF"))
     as_of = assignments[0].start_date + timedelta(days=1)
     shift = actual_shift_for_date(as_of, anchor_shift, all_shifts)
@@ -295,9 +283,6 @@ class TestIngestionIdempotency:
             assert second_run.success_count == 1
             assert second_run.skipped_count == 0
 
-            # `run_ingestion` bu satırları ham bağlantı üzerinden günceller (ORM unit-of-work
-            # dışında) — session'ın identity map'indeki eski nesneler expire edilmeden tekrar
-            # okunursa bayat veri döner.
             db.expire_all()
 
             count = db.scalar(
@@ -305,14 +290,14 @@ class TestIngestionIdempotency:
                     PerformanceRecord.source_record_id == "TEST-CORRECTED-1"
                 )
             )
-            assert count == 1  # aynı satır güncellendi, ikinci bir satır oluşmadı
+            assert count == 1
 
             updated = db.get(PerformanceRecord, first_id)
             assert updated.actual_value == 7.5
 
             updated_score = db.scalar(select(PerformanceScore).where(PerformanceScore.performance_record_id == first_id))
             assert updated_score is not None
-            assert updated_score.raw_score != first_raw_score  # yeniden puanlandı
+            assert updated_score.raw_score != first_raw_score
 
             issue = db.scalar(
                 select(DataQualityIssue).where(
@@ -347,7 +332,7 @@ class TestIngestionIdempotency:
             first_updated_at = first.updated_at
 
             second_run = run_ingestion(db, _FixedProvider([make_record()]), as_of, as_of)
-            assert second_run.success_count == 1  # idempotent "success", DUPLICATE olarak atlanmaz
+            assert second_run.success_count == 1
             assert second_run.skipped_count == 0
 
             count = db.scalar(
@@ -358,7 +343,7 @@ class TestIngestionIdempotency:
             assert count == 1
 
             unchanged = db.get(PerformanceRecord, first.id)
-            assert unchanged.updated_at == first_updated_at  # dokunulmadı
+            assert unchanged.updated_at == first_updated_at
 
             duplicate_issue_count = db.scalar(
                 select(func.count()).select_from(DataQualityIssue).where(
@@ -389,9 +374,6 @@ class TestIngestionIdempotency:
             saved = db.scalar(select(PerformanceRecord).where(PerformanceRecord.source_record_id == "TEST-IDENTITY-1"))
             first_id = saved.id
 
-            # Aynı source_record_id, ama SAME actual_value ile FARKLI bir tarih iddia ediyor —
-            # değer alanları tesadüfen değişmediği için `_record_content_changed` tek başına
-            # bunu fark edemezdi; kimlik kontrolü olmasaydı sessizce hiçbir şey olmazdı.
             corrected_identity = RawPerformanceRecord(
                 source_record_id="TEST-IDENTITY-1", performance_date=other_date,
                 plant_code=plant.code, chief_employee_number=chief.employee_number,
@@ -403,7 +385,7 @@ class TestIngestionIdempotency:
             assert second_run.skipped_count == 1
 
             unchanged = db.get(PerformanceRecord, first_id)
-            assert unchanged.performance_date == as_of  # kimlik alanı güncellenmedi
+            assert unchanged.performance_date == as_of
 
             issue = db.scalar(
                 select(DataQualityIssue).where(
@@ -431,9 +413,6 @@ class TestIngestionIdempotency:
             )
             run_ingestion(db, _FixedProvider([existing]), as_of, as_of)
 
-            # İkinci çalıştırmada AYNI source_record_id'yi (düzeltilmiş değerle) TAMAMEN YENİ
-            # kayıtlarla aynı batch'te gönderiyoruz — eski davranışta bu, `uq_perf_record_source`'u
-            # ON CONFLICT'in kapsamadığı bir çakışmayla ihlal edip TÜM INSERT'i düşürebilirdi.
             corrected = RawPerformanceRecord(
                 source_record_id="TEST-BATCH-EXISTING-1", performance_date=as_of,
                 plant_code=plant.code, chief_employee_number=chief.employee_number,
@@ -498,8 +477,6 @@ class TestIngestionIdempotency:
             )
             assert saved is not None
             assert saved.data_quality_status == DataQualityStatus.SUSPICIOUS
-            # FK'yi ihlal etmemek için gerçek/yetkili şef (tesisin kendi şefi) kaydedilir,
-            # kaynağın (yanlışlıkla) bildirdiği şef değil.
             assert saved.chief_id == plant.chief_id
             assert saved.chief_id != wrong_chief.id
         finally:

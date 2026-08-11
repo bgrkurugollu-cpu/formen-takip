@@ -16,19 +16,16 @@ await page.click('button[type="submit"]');
 await page.waitForSelector("text=Genel Bakış", { timeout: 15000 });
 await page.waitForTimeout(1000);
 
-// Dashboard: contribution summary section
 await page.waitForSelector("text=Katkı ve İyileştirme Çalışmaları Özeti", { timeout: 10000 });
 await page.screenshot({ path: `${shotDir}/dashboard-with-contrib.png` });
 console.log("dashboard summary section visible");
 
-// Nav to list page
 await page.click('text=Katkı ve İyileştirme Çalışmaları');
 await page.waitForSelector("text=Yeni Çalışma Ekle", { timeout: 10000 });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: `${shotDir}/improvement-works-list-card.png`, fullPage: true });
 console.log("list page (card view) loaded");
 
-// Table view toggle
 await page.click('button:has-text("Tablo")');
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shotDir}/improvement-works-list-table.png`, fullPage: true });
@@ -36,7 +33,6 @@ console.log("list page (table view) loaded");
 await page.click('button:has-text("Kart")');
 await page.waitForTimeout(500);
 
-// Open first card's detail page
 const firstCard = page.locator('a[href^="/improvement-works/"]').first();
 await firstCard.click();
 await page.waitForSelector("text=PDF olarak indir", { timeout: 10000 });
@@ -47,7 +43,6 @@ console.log("detail page loaded");
 await page.goBack();
 await page.waitForTimeout(500);
 
-// Create a new draft work via the form (title-only, per spec)
 await page.click('text=Yeni Çalışma Ekle');
 await page.waitForSelector('text=Yeni Katkı / İyileştirme Çalışması', { timeout: 10000 });
 const titleInput = page.locator('label:has-text("Çalışma Başlığı")').locator('xpath=following-sibling::input[1]');
@@ -58,7 +53,6 @@ await draftButton.click();
 await page.waitForTimeout(1500);
 console.log("draft save attempted");
 
-// Search for it in the list
 await page.fill('input[placeholder*="Başlık"]', "Playwright Smoke Test");
 await page.waitForTimeout(1000);
 await page.screenshot({ path: `${shotDir}/improvement-works-search-result.png`, fullPage: true });

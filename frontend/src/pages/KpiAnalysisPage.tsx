@@ -35,8 +35,6 @@ export function KpiAnalysisPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Seçili KPI URL'de ("kpi" query param) tutulur, böylece Genel Bakış gibi başka
-  // sayfalardan doğrudan bu KPI'a deep-link verilebilir; belirtilmemişse ilk KPI'a düşer.
   const selectedKpiId = searchParams.get("kpi") ?? kpis.data?.items[0]?.id ?? null;
 
   const selectKpi = (id: string) => {

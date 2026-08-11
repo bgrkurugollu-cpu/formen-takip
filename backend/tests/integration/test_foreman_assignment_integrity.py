@@ -68,8 +68,6 @@ class TestForemanAssignmentNoOverlappingDateRanges:
         db = SessionLocal()
         try:
             existing = _pick_assignment(db)
-            # Aynı şefe bağlı BAŞKA bir formen kullanılıyor ki tetikleyici (single-chief) değil,
-            # asıl test edilmek istenen EXCLUDE (tarih aralığı çakışması) kısıtı devreye girsin.
             other_foreman_id = _pick_foreman_with_same_chief(db, existing.chief_id, existing.foreman_id)
             overlapping = ForemanAssignment(
                 id=uuid.uuid4(), foreman_id=other_foreman_id, plant_id=existing.plant_id,
@@ -100,8 +98,6 @@ class TestForemanSingleChiefInvariant:
                 start_date=date(2030, 1, 1), end_date=None, is_active=True,
             )
             db.add(bad)
-            # Tetikleyici PL/pgSQL `RAISE EXCEPTION` ile hata verir — psycopg bunu
-            # ProgrammingError'a sarar (CHECK/EXCLUDE'daki IntegrityError'dan farklı).
             with pytest.raises(ProgrammingError):
                 db.commit()
         finally:
@@ -115,9 +111,6 @@ class TestForemanSingleChiefInvariant:
             existing = _pick_assignment(db)
             reference_plant = db.get(Plant, existing.plant_id)
 
-            # Gerçek tesislerin her ikisi (V1/V2) de zaten açık uçlu satırlarla dolu — tetikleyicinin
-            # "aynı şef" satırlarını EXCLUDE kısıtına takılmadan izole test etmek için aynı şefe
-            # bağlı, boş bir geçici tesis kullanılıyor.
             temp_plant = Plant(
                 id=uuid.uuid4(), code=f"TEST-{uuid.uuid4().hex[:8]}", name="Test Tesis (geçici)",
                 sequence_number=100_000 + (uuid.uuid4().int % 800_000),

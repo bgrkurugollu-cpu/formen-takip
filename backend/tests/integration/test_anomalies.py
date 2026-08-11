@@ -13,8 +13,6 @@ def _sample_anomaly(db_session) -> Anomaly:
 
 
 def _fresh_anomaly(db_session) -> Anomaly:
-    """Paylaşılan (sıfırlanmayan) test veritabanında tekrarlanabilir olması için, seçilen
-    tespitin önceki analiz geçmişini temizleyip 'not_analyzed' durumuna sıfırlar."""
     anomaly = _sample_anomaly(db_session)
     db_session.execute(delete(AnomalyAnalysis).where(AnomalyAnalysis.anomaly_id == anomaly.id))
     anomaly.analysis_status = AnomalyAnalysisStatus.NOT_ANALYZED

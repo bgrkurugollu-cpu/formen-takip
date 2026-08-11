@@ -415,7 +415,6 @@ export function useContributionSummary(params: Params = {}) {
   });
 }
 
-// --- Tespitler (Anomalies) ---
 
 export function useAnomalies(params: Params) {
   return useQuery({
@@ -487,11 +486,7 @@ export function useAnalysisToolCalls(analysisId: string | undefined) {
   });
 }
 
-// --- Vardiya Analizi ---
 
-// `/cards` tek istekte hem kart listesini hem özeti döner — `summary` ayrı bir endpoint/istek
-// olarak tutulsaydı, backend aynı ay/filtre için aylık ham kayıt çekme + hücre gruplama +
-// karşılaştırma işini iki ayrı istekte iki kez yapardı (bkz. shift_analysis.py::get_cards).
 export function useShiftAnalysisCards(params: Params) {
   return useQuery({
     queryKey: ["shift-analysis", "cards", params],

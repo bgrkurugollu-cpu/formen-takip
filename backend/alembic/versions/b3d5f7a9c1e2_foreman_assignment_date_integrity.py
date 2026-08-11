@@ -1,27 +1,3 @@
-"""foreman_assignments date-range integrity.
-
-Closes four gaps in `ForemanAssignment` that were never enforced at the DB level:
-
-1. `start_date <= end_date` had no CHECK — a corrupted or manually-edited row could have an
-   end before its start with nothing to catch it.
-2. `is_active = false` with `end_date IS NULL` is always inconsistent (an inactive assignment
-   must record when it ended) — also a plain CHECK.
-3. The existing partial unique index (`uq_foreman_assignments_plant_shift_active`, migration
-   `b7c9e1a3d5f2`) only guards *active* rows — nothing stopped two rows (e.g. both inactive, or
-   one active/one historical) from claiming overlapping date ranges for the same plant+shift.
-   Fixed with a range-overlap EXCLUDE constraint (requires `btree_gist` for the uuid equality
-   terms alongside the `daterange` overlap term). This matters concretely: `assignment_resolver.
-   resolve_assignment` (added for the ingestion assignment-validity check) takes the *first*
-   matching candidate for a foreman+plant+date — an undetected historical overlap would make
-   that pick arbitrary.
-4. Nothing enforced "a foreman reports to exactly one chief" (see CLAUDE.md) — two
-   `foreman_assignments` rows for the same foreman could reference different chiefs. Enforced
-   with a trigger, since a cross-row-per-foreign-key invariant like this has no direct
-   CHECK/UNIQUE/EXCLUDE representation.
-
-Existing data already satisfies all four constraints (verified against the live DB before
-writing this migration), so no cleanup step is needed.
-"""
 from typing import Sequence, Union
 
 from alembic import op

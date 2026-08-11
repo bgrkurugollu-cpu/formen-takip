@@ -18,12 +18,10 @@ await page.waitForSelector("text=Genel Bakış", { timeout: 15000 });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: `${shotDir}/karaman-dashboard.png` });
 
-// Dashboard
 await page.goto(`${BASE}/plants`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${shotDir}/karaman-plants.png`, fullPage: true });
 
-// Open FilterBar Fabrika dropdown, select K1
 await page.click('button:has-text("Fabrika")');
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${shotDir}/karaman-factory-dropdown.png` });
@@ -36,7 +34,6 @@ await page.mouse.click(10, 10);
 await page.waitForTimeout(1000);
 await page.screenshot({ path: `${shotDir}/karaman-plants-k1-filtered.png`, fullPage: true });
 
-// Plant detail
 await page.goto(`${BASE}/plants`, { waitUntil: "networkidle" });
 await page.waitForTimeout(800);
 const firstRow = page.locator("table tbody tr").first();
@@ -44,12 +41,10 @@ await firstRow.click();
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${shotDir}/karaman-plant-detail.png`, fullPage: true });
 
-// Foremen page
 await page.goto(`${BASE}/foremen`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${shotDir}/karaman-foremen.png`, fullPage: true });
 
-// Foreman detail
 const firstForemanRow = page.locator("table tbody tr").first();
 await firstForemanRow.click();
 await page.waitForTimeout(1500);

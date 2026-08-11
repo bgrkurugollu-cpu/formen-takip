@@ -34,11 +34,6 @@ function formatValue(value: number, unit: string, decimalPlaces: number): string
   return `${value.toFixed(decimalPlaces)} ${unit}`;
 }
 
-// Sapma büyüklüğü yönden bağımsız hesaplanır — "daha iyi/daha kötü" niteleyicisi her zaman
-// `tier`den (gerçek puanlama motorunun ürettiği capped_score üzerinden) gelir. Plana Uyum gibi
-// "hedefin hem altı hem üstü kötü" (aralık tipi) KPI'larda basit success_direction_higher
-// karşılaştırması yanlış yön söyler (örn. %135 gerçekleşme sayısal olarak hedefin üstünde ama
-// performans kötüdür) — tier tek doğru kaynak olduğu için niteleyici de ondan türetilir.
 function pctDeviation(actual: number, target: number): number {
   return target !== 0 ? Math.abs((actual - target) / target) * 100 : 0;
 }

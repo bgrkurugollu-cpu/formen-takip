@@ -61,8 +61,6 @@ export function useFilters() {
   const setFilters = useCallback(
     (partial: Partial<FilterState>) => {
       const next = { ...filters, ...partial };
-      // Tabanı mevcut searchParams'tan alır: sayfaya özel ek query paramlarını (ör. seçili KPI)
-      // korumak için — sıfırdan kurulursa FilterBar'daki her değişiklik onları siler.
       const params = new URLSearchParams(searchParams);
       const setOrDelete = (key: string, value: string) => {
         if (value) params.set(key, value);

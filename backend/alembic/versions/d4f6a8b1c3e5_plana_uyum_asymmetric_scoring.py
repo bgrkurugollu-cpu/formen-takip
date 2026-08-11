@@ -1,14 +1,3 @@
-"""Plana Uyum v3: asymmetric plan-achievement scoring.
-
-Data-only migration. New business rule: production above plan is no longer a deviation to
-penalize — it is rewarded (logarithmically damped past +5%), while production below plan is
-still penalized, and more strongly than before. Closes the current PLANA_UYUM calculation rule
-(is_active=False, valid_to=today) and inserts a new one (formula_type=
-'ASYMMETRIC_PLAN_ACHIEVEMENT') at the next version number, so historical scores stay traceable
-to the rule that produced them. Existing performance_scores are NOT rescored here — that is a
-separate, explicit step (`rescore_all` / `apply-scoring-model-v2`), consistent with how this
-project's ingestion/rescoring pipeline is invoked outside of migrations.
-"""
 import json
 import uuid
 from datetime import date
@@ -41,9 +30,6 @@ _V3_PARAMS = {
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # Boş bir veritabanında (henüz hiç seed edilmemiş) kpis tablosu boştur — bu durumda hiçbir
-    # şey yapmaya gerek yok, çünkü seed_reference_data zaten DEFAULT_KPI_SEED üzerinden
-    # PLANA_UYUM'u doğrudan yeni (asimetrik) formülle oluşturur (bkz. b6d4f8a2c1e7'deki aynı desen).
     existing_kpi_count = bind.execute(sa.text("SELECT count(*) FROM kpis WHERE code = 'PLANA_UYUM'")).scalar()
     if not existing_kpi_count:
         return
@@ -76,8 +62,6 @@ def upgrade() -> None:
         """
     ), {"version": next_version, "params": json.dumps(_V3_PARAMS), "valid_from": _TODAY})
 
-    # Yön artık simetrik değil ("plan altı/üstü eşit ağırlıkta sapma") — açıklama metni de
-    # güncellenir ki KPI listesi/AI asistan bağlamı eski semantiği anlatmaya devam etmesin.
     bind.execute(sa.text(
         """
         UPDATE kpis

@@ -59,12 +59,6 @@ def _issue_description(status: DataQualityStatus, source_record_id: str) -> str:
     return f"{base} (kaynak kayıt: {source_record_id})"
 
 
-# Yalnızca ÖLÇÜLEN/hesaplanan değer alanları güncellenebilir kabul edilir — doğal anahtarı
-# oluşturan kimlik alanları (foreman_id, kpi_id, chief_id, shift_id, performance_date, plant_id)
-# kasıtlı olarak dışarıda bırakılır: bir "düzeltme" bunları değiştirseydi UPDATE'in kendisi
-# `uq_perf_record_natural_key`'i ihlal edip batch'i düşürebilirdi (bkz. run_ingestion docstring).
-# Kimlik değişikliği gereken bir "düzeltme" bu yüzden bilinçli olarak burada değil, ayrı bir
-# veri kalitesi incelemesi gerektiren bir DUPLICATE/SUSPICIOUS olayı olarak ele alınır.
 _MUTABLE_VALUE_FIELDS = (
     "target_value", "actual_value", "numerator_value", "denominator_value",
     "unit", "data_quality_status", "source_updated_at", "production_record_id",
@@ -99,12 +93,6 @@ def run_ingestion(
     date_to: date,
     plant_codes: list[str] | None = None,
 ) -> IntegrationRun:
-    """Her `RawPerformanceRecord`, `(source_system, source_record_id)` kimliğine göre upsert
-    edilir: aynı kaynak kayıt daha önce görülmüşse ve ölçülen değerleri değiştiyse mevcut satır
-    güncellenip yeniden puanlanır (bkz. `_MUTABLE_VALUE_FIELDS`); değişmediyse idempotent no-op'tur;
-    hiç görülmemişse yeni satır olarak eklenir (doğal anahtar çakışması burada hâlâ `ON CONFLICT
-    DO NOTHING` ile sessizce atlanır — iki FARKLI kaynak kaydının aynı iş olayını iddia etmesi,
-    yani gerçek bir DUPLICATE)."""
     run = IntegrationRun(
         source_system=provider.source_system,
         started_at=datetime.now(timezone.utc),
@@ -126,13 +114,6 @@ def run_ingestion(
         if not record_batch:
             return
 
-        # Gerçek upsert: önce AYNI (source_system, source_record_id)'e sahip mevcut kayıt var mı
-        # bakılır. Varsa bu satır INSERT'e hiç girmez — böylece `uq_perf_record_source`'u
-        # `ON CONFLICT`in kapsamadığı bir çakışmayla ihlal edip tüm batch'i düşürme riski
-        # (bkz. rescoring.py::_InkitaOnlyProvider'daki aynı sorunun etrafından dolaşma notu)
-        # ortadan kalkar: kalan INSERT'ler için natural-key'e göre ON CONFLICT DO NOTHING zaten
-        # güvenlidir, çünkü bu noktadan sonra hiçbir satır source_record_id'si zaten var olan
-        # bir satırla çakışmıyordur.
         source_keys = {(r["source_system"], r["source_record_id"]) for r in record_batch}
         existing_by_source: dict[tuple, PerformanceRecord] = {}
         if source_keys:
@@ -153,11 +134,6 @@ def run_ingestion(
             if existing_row is None:
                 to_insert.append(rec)
             elif _identity_changed(existing_row, rec):
-                # Aynı kaynak kayıt artık farklı bir formen/KPI/şef/vardiya/tarih/tesis iddia
-                # ediyor — bu, `_MUTABLE_VALUE_FIELDS`'ın bilinçli olarak kapsamadığı bir
-                # kimlik değişikliği (bkz. yukarıdaki not). Sessizce yok saymak yerine (değer
-                # alanları tesadüfen aynıysa fark edilmeden kaybolabilirdi) işaretlenir; hiçbir
-                # alan güncellenmez, manuel inceleme gerekir.
                 identity_conflict_ids.add(rec["id"])
             elif _record_content_changed(existing_row, rec):
                 to_update.append((existing_row, rec))
@@ -185,13 +161,8 @@ def run_ingestion(
                 {"_id": existing_row.id, "_updated_at": now_ts, **{f: rec[f] for f in _MUTABLE_VALUE_FIELDS}}
                 for existing_row, rec in to_update
             ]
-            # `db.execute` burada literal "id" anahtarını PK sanıp ORM bulk-UPDATE algılaması
-            # yapabildiğinden (bkz. rescoring.py::rescore_all aynı notu), ham bağlantı kullanılır.
             db.connection().execute(upd, update_params)
             updated_ids = {p["_id"] for p in update_params}
-            # Ham bağlantı ORM unit-of-work'ü atladığından, session'ın identity map'indeki
-            # `existing_row` nesneleri artık bayat — aynı kayıt bu run içinde (farklı bir batch'te)
-            # tekrar referans alınırsa güncel veri okunsun diye expire edilir.
             for existing_row, _ in to_update:
                 db.expire(existing_row)
 
@@ -223,8 +194,6 @@ def run_ingestion(
             )
             db.execute(score_stmt)
 
-        # Güncellenen ama artık puanlanamayan (ör. yeni durum COMPLETE değil) kayıtların eski
-        # skoru kalıntı olarak kalmasın.
         scored_updated_ids = {s["performance_record_id"] for s in relevant_scores if s["performance_record_id"] in id_remap.values()}
         stale_score_ids = set(id_remap.values()) - scored_updated_ids
         if stale_score_ids:
@@ -318,10 +287,6 @@ def run_ingestion(
         status = DataQualityStatus.COMPLETE
         target_value = raw.target_value
 
-        # `Plant.chief_id` o tesisin tek yetkili şefidir (DB seviyesinde
-        # `fk_performance_records_plant_chief` ile garanti edilir) — kaynağın bildirdiği şef
-        # bununla uyuşmuyorsa kayıt şüpheli işaretlenir, ama FK'yi ihlal etmemek için her zaman
-        # tesisin gerçek şefi kaydedilir (aşağıdaki record_batch.append'e bakınız).
         if chief.id != plant.chief_id:
             status = DataQualityStatus.SUSPICIOUS
 
@@ -362,9 +327,6 @@ def run_ingestion(
                 "integration_run_id": run.id,
                 "performance_date": raw.performance_date,
                 "plant_id": plant.id,
-                # Kaynağın bildirdiği şef değil, tesisin gerçek/yetkili şefi kaydedilir
-                # (bkz. yukarıdaki SUSPICIOUS kontrolü) — aksi halde uyuşmayan bir kombinasyon
-                # `fk_performance_records_plant_chief`'i ihlal edip tüm batch'i patlatabilir.
                 "chief_id": plant.chief_id,
                 "shift_id": shift.id,
                 "foreman_id": foreman.id,

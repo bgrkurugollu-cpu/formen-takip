@@ -28,8 +28,6 @@ def make_stat(avg_actual: float, record_count: int = 10, week_indices: list[int]
 
 
 class _StubShift:
-    """`_build_matrix_insight` yalnızca `.id` ve `.name`'e ihtiyaç duyar — gerçek `Shift` ORM
-    modelini (Time sütunları, DB bağlantısı gerektirmeyen) kurmak yerine hafif bir stub yeterli."""
 
     def __init__(self, name: str):
         self.id = uuid4()
@@ -98,7 +96,6 @@ class TestComparePair:
         assert result is None
 
     def test_lower_is_better_direction(self):
-        # Iskarta gibi düşük-iyi bir KPI'da düşük değerli taraf "better" olmalı.
         a, b = make_stat(5.0), make_stat(8.0)
         result = _compare_pair(a, b, higher_is_better=False, thresholds=ShiftAnomalyThresholds())
         assert result is not None
@@ -117,9 +114,6 @@ class TestComparePair:
         assert result is None
 
     def test_near_zero_ideal_value_does_not_explode_percentage(self):
-        # Ağır Gitme gibi "düşük değer iyi" bir KPI'da ideal değer sıfıra çok yakındır (ör. 0.01
-        # vs 4.04) — küçük tarafı taban alan eski formül burada binlerce yüzdelik anlamsız bir
-        # fark üretiyordu. Ortalamayı taban alan yeni formül kararlı kalmalı.
         a, b = make_stat(0.01), make_stat(4.04)
         result = _compare_pair(a, b, higher_is_better=False, thresholds=ShiftAnomalyThresholds())
         assert result is not None
@@ -127,9 +121,6 @@ class TestComparePair:
         assert result.pct_diff < 250
 
     def test_tiny_absolute_gap_near_zero_scale_is_filtered_even_if_pct_high(self):
-        # İki taraf da neredeyse sıfırsa (ör. %0.04 vs %0.43 Ağır Gitme) yüzdesel fark kolayca
-        # eşiği geçer ama mutlak fark (0.39 puan) yönetim için önemsizdir — min_abs_diff_points
-        # bunu filtrelemeli.
         a, b = make_stat(0.04), make_stat(0.43)
         result = _compare_pair(a, b, higher_is_better=False, thresholds=ShiftAnomalyThresholds())
         assert result is None
@@ -143,9 +134,6 @@ class TestComparePair:
 
 
 class TestExtremePair:
-    """Bir hücrede normalde tam 2 formen olur, ama personel değişikliği aynı aya denk gelirse
-    3+ formen görülebilir — seçim kayıt SAYISINA göre değil, en uç DEĞERE göre yapılmalı
-    (bkz. shift_analysis.py::_extreme_pair docstring'i)."""
 
     def test_exactly_two_candidates_returns_both(self):
         a, b = make_stat(90.0), make_stat(110.0)
@@ -154,8 +142,6 @@ class TestExtremePair:
         assert {result[0].foreman_id, result[1].foreman_id} == {a.foreman_id, b.foreman_id}
 
     def test_three_candidates_picks_true_extremes_not_highest_record_count(self):
-        # En çok kaydı olan (30) orta değerli — eski "kayıt sayısına göre ilk iki" davranışı
-        # bunu ve en düşük değerlisini (mid) seçip asıl en büyük farkı (low vs high) kaçırırdı.
         low = make_stat(70.0, record_count=10)
         mid = make_stat(95.0, record_count=30)
         high = make_stat(120.0, record_count=10)
@@ -164,8 +150,6 @@ class TestExtremePair:
         assert {result[0].foreman_id, result[1].foreman_id} == {low.foreman_id, high.foreman_id}
 
     def test_candidate_with_too_few_records_is_excluded_even_if_most_extreme(self):
-        # `low` en uç değere sahip ama tek başına anlamlı sayılamayacak kadar az kaydı var
-        # (ör. geçici/tek günlük yedek formen) — dahil edilirse yanıltıcı bir "anomali" doğardı.
         low = make_stat(10.0, record_count=1)
         mid_a = make_stat(90.0, record_count=10)
         mid_b = make_stat(110.0, record_count=10)
@@ -221,8 +205,6 @@ class TestIsConsistentPattern:
 
 
 class TestClassifyDiffLevel:
-    """Heatmap sınıflandırması — `_compare_pair` ile aynı normalize edilmiş fark formülünü
-    paylaşır ama eşiğin altında kalan hücreleri de (None yerine) "normal" olarak döner."""
 
     def test_no_data_when_one_side_missing(self):
         a = make_stat(100.0)
@@ -258,8 +240,6 @@ class TestClassifyDiffLevel:
         assert level == "critical"
 
     def test_tiny_absolute_gap_near_zero_scale_is_normal_even_if_pct_high(self):
-        # `_compare_pair`'daki aynı davranış (bkz. yukarıdaki eşdeğer test) — heatmap'te kart
-        # listesinden farklı olarak None değil "normal" döner, hücre matriste hâlâ görünür.
         a, b = make_stat(0.04), make_stat(0.43)
         level, _, _ = classify_diff_level(a, b, ShiftAnomalyThresholds())
         assert level == "normal"
@@ -330,9 +310,6 @@ class TestBuildMatrixInsight:
         assert "vardiyadan çok Formen A" in result
 
     def test_cross_foreman_same_shift_effect(self):
-        # Formenler kendi içlerinde vardiyalar arasında istikrarlı ama AYNI vardiyada birbirinden
-        # belirgin şekilde ayrışıyorlar — sorun formen performansıyla ilişkili, cümlede vardiya
-        # adı ("1. Vardiya") tekrar etmeden ("... vardiyasında vardiyasında" gibi) doğal okunmalı.
         v1, v2 = make_shift("1. Vardiya"), make_shift("2. Vardiya")
         row_a = ForemanShiftRow(
             foreman_id=uuid4(), name="Formen A", employee_number="A",

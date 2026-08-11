@@ -34,11 +34,8 @@ def _by_code(components):
 
 
 class TestDeriveAgirGitme:
-    """Ağır Gitme, kabul edilen aralığın (lower/upper) dışına çıkmadır — standart gramajdan
-    (aralığın ortasından) sapma değil."""
 
     def test_within_band_is_zero_deviation_even_if_off_standard(self):
-        # 41 kabul edilebilir aralıkta (37-42 arası standart=40 örneğiyle) -> sapma 0 olmalı.
         actual, numerator, denominator = derive_agir_gitme(
             measured_gram=41.0, standard_gram=40.0, lower_limit=37.0, upper_limit=42.0, actual_qty=1000.0
         )
@@ -50,14 +47,14 @@ class TestDeriveAgirGitme:
         actual, numerator, _ = derive_agir_gitme(
             measured_gram=43.0, standard_gram=40.0, lower_limit=37.0, upper_limit=42.0, actual_qty=1000.0
         )
-        assert numerator == pytest.approx(1.0 * 1000.0)  # 43 - upper(42) = 1
+        assert numerator == pytest.approx(1.0 * 1000.0)
         assert actual > 0
 
     def test_below_lower_limit_is_negative_signed_deviation(self):
         actual, numerator, _ = derive_agir_gitme(
             measured_gram=35.0, standard_gram=40.0, lower_limit=37.0, upper_limit=42.0, actual_qty=1000.0
         )
-        assert numerator == pytest.approx(-2.0 * 1000.0)  # 35 - lower(37) = -2
+        assert numerator == pytest.approx(-2.0 * 1000.0)
         assert actual < 0
 
     def test_zero_denominator_returns_none(self):
@@ -121,11 +118,8 @@ class TestGsfIskarta:
 
 
 class TestInkita:
-    """İnkita gerçekleşmesi yalnızca Teknik + İmalat toplamıdır — Diğer hiç dahil edilmez."""
 
     def test_denominator_derived_from_real_planned_window_not_hardcoded(self):
-        # 6 saatlik bir vardiya penceresi (480 dakika değil) — payda gerçek zaman
-        # damgalarından hesaplanmalı.
         record = _record(
             planned_start_at=datetime(2026, 3, 5, 8, 0, tzinfo=timezone.utc),
             planned_end_at=datetime(2026, 3, 5, 14, 0, tzinfo=timezone.utc),
@@ -153,7 +147,6 @@ class TestInkita:
         assert "INKITA" not in result
 
     def test_not_fabricated_from_partial_data(self):
-        # Teknik eksikse İmalat tek başına kullanılıp toplam uydurulmamalı.
         result = _by_code(_kpi_components(_record(technical_downtime_minutes=None, manufacturing_downtime_minutes=10.0), _product()))
         assert "INKITA" not in result
 

@@ -35,9 +35,6 @@ export function ShiftAnalysisPage() {
   const cards = useShiftAnalysisCards(asQueryParams);
   const summary = cards.data?.summary;
 
-  // Heatmap, vardiya/şiddet filtrelerini kullanmaz (bkz. build_heatmap docstring'i — matris
-  // zaten V1-vs-V2 karşılaştırmasıdır, tek bir vardiyaya filtrelemek anlamsız kalır) — bu yüzden
-  // yalnızca fabrika/tesis/KPI alt kümesini kendi query'sine taşır.
   const heatmapParams = useMemo(
     () => ({ factory_ids: asQueryParams.factory_ids, plant_ids: asQueryParams.plant_ids, kpi_ids: asQueryParams.kpi_ids }),
     [asQueryParams.factory_ids, asQueryParams.plant_ids, asQueryParams.kpi_ids]

@@ -24,9 +24,6 @@ def _cleanup_contribution_works(db_session):
 
 def _sample_plant_and_foreman(db_session):
     plant = db_session.scalars(select(Plant).order_by(Plant.sequence_number)).first()
-    # Sentetik seed verisi az sayıdaki formene rastgele katkı çalışmaları atayabildiğinden
-    # (bkz. contribution_generator.py), testin "sıfırdan başlar" varsayımını bozmamak için
-    # halihazırda yayımlanmış bir çalışması olan formenler eleniyor.
     has_published_work = select(ContributionWorkForeman.foreman_id).join(
         ContributionWork, ContributionWork.id == ContributionWorkForeman.work_id
     ).where(ContributionWork.status == ContributionStatus.PUBLISHED)
@@ -72,9 +69,6 @@ class TestContributionWorkList:
         assert "items" in body and "total" in body
 
     def test_sql_sortable_pages_do_not_overlap(self, client, auth_headers):
-        # Sıkı bir döngüde ardışık oluşturulan taslaklar `work_date`de (hepsi None) çakışır —
-        # ikincil `id` sıralama anahtarı olmadan sayfa 1/sayfa 2 aynı satırı ikisinde de
-        # gösterebilir ya da hiç göstermeyebilir (bkz. list_contribution_works SQL dalı).
         created_ids = set()
         for i in range(8):
             resp = client.post(
@@ -272,16 +266,13 @@ class TestForemanContributionSummary:
         ).first()
         assert second is not None
 
-        # Yayımlanmış, tek formenli çalışma: tahmini kazancın tamamı bu formene ait sayılmalı.
         client.post("/api/v1/contribution-works", json=_full_payload(plant, foreman), headers=auth_headers)
 
-        # Yayımlanmış, iki formenli çalışma: kazanç ve zaman tasarrufu eşit paylaşılmalı.
         shared_payload = _full_payload(plant, foreman)
         shared_payload["title"] = "Ortak SMED Çalışması"
         shared_payload["foreman_ids"] = [str(foreman.id), str(second.id)]
         client.post("/api/v1/contribution-works", json=shared_payload, headers=auth_headers)
 
-        # Taslak çalışma: özet toplamlarına dahil edilmemeli.
         client.post(
             "/api/v1/contribution-works",
             json={"title": "Taslak - sayılmamalı", "foreman_ids": [str(foreman.id)]},
@@ -295,9 +286,7 @@ class TestForemanContributionSummary:
         assert body["smed_count"] == 2
         assert body["led_contributions"] == 1
         assert body["verified_financial_gain"] == {}
-        # 250000 (tek başına, tam pay) + 250000/2 (paylaşılan) = 375000
         assert body["estimated_financial_gain"]["TRY"] == pytest.approx(375000, rel=0.001)
-        # 510 (tek başına, tam pay) + 510/2 (paylaşılan) = 765
         assert body["total_time_saving_minutes"] == pytest.approx(765, rel=0.001)
         assert body["last_contribution_date"] == "2026-01-15"
 

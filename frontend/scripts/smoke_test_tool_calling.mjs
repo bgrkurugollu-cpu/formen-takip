@@ -20,12 +20,10 @@ await page.waitForSelector("text=Toplam Aktif Tespit", { timeout: 10000 });
 await page.locator("table tbody tr").nth(2).click();
 await page.waitForSelector("text=Sayısal Veriler", { timeout: 10000 });
 
-// Switch to "Derinlemesine Analiz" mode
 await page.click('button:has-text("Derinlemesine Analiz")');
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${shotDir}/tool-calling-mode-selected.png`, fullPage: true });
 
-// Trigger analysis (works whether this is first analyze or a re-run)
 const analyzeBtn = page.locator('button:has-text("Yapay Zeka ile Analiz Et")');
 const refreshBtn = page.locator('button:has-text("Analizi Yenile")');
 if (await analyzeBtn.count()) {
@@ -43,7 +41,6 @@ await page.waitForTimeout(500);
 await page.screenshot({ path: `${shotDir}/tool-calling-result.png`, fullPage: true });
 console.log("tool_calling analysis result rendered");
 
-// Expand Analiz Adımları
 const stepsToggle = page.locator('button:has-text("adımı göster")');
 if (await stepsToggle.count()) {
   await stepsToggle.click();

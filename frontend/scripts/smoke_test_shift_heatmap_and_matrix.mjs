@@ -23,11 +23,9 @@ for (const theme of ["light", "dark"]) {
   await page.screenshot({ path: `${shotDir}/heatmap-page-${theme}.png`, fullPage: true });
   console.log("saved heatmap page", theme);
 
-  // Heatmap grid + legend sanity checks
   const legendNormal = page.locator("text=Normal").first();
   console.log("legend visible:", await legendNormal.count() > 0, theme);
 
-  // Click the first non-"no data" cell we can find and confirm drill-down navigation.
   const cellButtons = page.locator("table button");
   const cellCount = await cellButtons.count();
   console.log("heatmap cell button count:", cellCount, theme);
@@ -46,7 +44,6 @@ for (const theme of ["light", "dark"]) {
       navigated = true;
       console.log("drilldown navigated, tooltip had 'Durum:':", tooltipVisible > 0, theme);
     } catch {
-      // not a plant page navigation attempt with this element, try next
       await page.goBack().catch(() => {});
     }
   }
@@ -61,8 +58,6 @@ for (const theme of ["light", "dark"]) {
     const insight = page.locator("text=Formen–Vardiya Karşılaştırması").locator("..").locator("..");
     console.log("insight block present:", (await page.locator("svg + p", { hasText: "" }).count()) >= 0, theme);
 
-    // Change KPI selector (scoped to the Formen-Vardiya card, not the global date-preset select)
-    // and confirm the matrix re-fetches without console errors.
     const matrixCard = page.locator("text=Formen–Vardiya Karşılaştırması").locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
     const kpiSelect = matrixCard.locator("select").first();
     const optionCount = await kpiSelect.locator("option").count();

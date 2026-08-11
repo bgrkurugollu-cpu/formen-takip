@@ -30,8 +30,6 @@ def _escape(value: str | None) -> str:
 
 
 def _progress_bar_flowable(score: float | None, color: str) -> Table:
-    """Basit iki-hücreli tablo tabanlı bir ilerleme çubuğu — grafik kütüphanesi gerektirmez
-    (spec bölüm 14: "tasarım karmaşıklaştırılmamalı")."""
     pct = max(0.0, min(1.0, (score or 0.0) / _BAR_MAX_SCORE))
     filled = max(2, round(_BAR_WIDTH * pct))
     remaining = max(2, round(_BAR_WIDTH - filled))
@@ -62,9 +60,6 @@ def _level_chip(level: dict | None, styles: dict) -> Table:
 
 
 def render_monthly_foreman_report_pdf(report_data: dict) -> bytes:
-    """`report_data`, monthly_foreman_report.py::_build_report_data tarafından üretilen ve
-    ForemanMonthlyReport.report_data içinde donmuş olarak saklanan sözlüktür — web görünümüyle
-    aynı tek kaynaktan render edilir, PDF ekstra bir hesaplama yapmaz."""
     _register_pdf_fonts()
 
     styles = getSampleStyleSheet()

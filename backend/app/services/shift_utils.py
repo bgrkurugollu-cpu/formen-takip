@@ -3,11 +3,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
-# Sentetik üretici hiçbir zaman ham bir zaman damgasından tarih çıkarmaz (üretim günü baştan
-# bilinir, oradan zaman damgaları türetilir — bkz. production_generator.py) ve `SAPDataProvider`
-# henüz implement edilmemiştir (bkz. providers/sap_provider.py) — bu yüzden bu fonksiyonların
-# şu an hiçbir gerçek çağıranı yoktur. Gerçek SAP entegrasyonu ham konfirmasyon zaman damgalarını
-# üretim gününe bağlamak için bunları kullanmalıdır, yeniden yazmamalıdır.
 
 
 def shift_crosses_midnight(start_time: time, end_time: time) -> bool:

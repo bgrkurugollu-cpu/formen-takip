@@ -10,13 +10,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Bir şef artık tek bir tesise değil, tesislerden oluşan sabit bir bölgeye ("zone")
-    # sorumludur; bir formen bu bölgedeki tüm tesislerden sorumlu olsa da her zaman TEK bir
-    # şefe bağlıdır (bkz. reference_data.py::seed_reference_data). Eski modelde (1 tesis = 1
-    # şef) bir formenin 2-4 tesise yayılan ataması, her tesisin kendi şefine bağlı kaldığından
-    # bir formeni aynı anda birden fazla şefe bağlayabiliyordu. Organizasyon kimlikleri kökten
-    # değiştiği için (şefler artık tesis değil bölge bazlı numaralanıyor) mevcut veri
-    # anlamsızlaşır — Karaman restrukturasyonuyla (6ad63dbc115b) aynı gerekçeyle TRUNCATE edilir.
     op.execute(
         "TRUNCATE TABLE factories, plants, chiefs, foremen, kpi_targets, integration_runs, "
         "shifts, kpis, performance_level_rules, products, company_calendar CASCADE"
@@ -32,13 +25,6 @@ def upgrade() -> None:
     op.create_foreign_key(None, 'plants', 'chiefs', ['chief_id'], ['id'])
     op.create_unique_constraint('uq_plants_id_chief_id', 'plants', ['id', 'chief_id'])
 
-    # Formenin (plant_id, chief_id) çifti her zaman tesisin gerçek şefiyle eşleşir — bu artık
-    # foreman_assignments için olduğu gibi foreman_work_calendar ve production_records için de
-    # DB seviyesinde garanti edilir (üretici kod zaten tutarlı üretiyordu, bu yalnızca invariant'ı
-    # şemaya taşır). Kompozit FK yalnızca plants'ı hedeflediği için (chiefs'i değil), ORM'nin
-    # Chief.assignments ilişkisini kurabilmesi için chief_id ayrıca chiefs.id'ye düz bir FK ile
-    # bağlanır (eski şemada tek kompozit FK chiefs(id, plant_id)'yi hedeflediğinden buna gerek
-    # yoktu).
     op.create_foreign_key(None, 'foreman_assignments', 'chiefs', ['chief_id'], ['id'])
     op.create_foreign_key(
         'fk_foreman_assignments_plant_chief', 'foreman_assignments', 'plants',

@@ -17,10 +17,7 @@ export function ShiftDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Bu sayfa belirli bir vardiyaya sabitlenmiştir: aktif filtrelerin üzerine (varsa)
-  // FilterBar'daki Vardiya seçimini değil, her zaman rota parametresindeki vardiyayı uygular.
   const scopedParams = useMemo(() => ({ ...asQueryParams, shift_ids: shiftId }), [asQueryParams, shiftId]);
-  // Bu sayfadan çıkışta ("Tesis"e / "Formen"e git) vardiya bağlamının kaybolmaması için taşınır.
   const searchWithShift = withSearchParam(location.search, "shift_ids", shiftId ?? "");
 
   const filterOptions = useFilterOptions();

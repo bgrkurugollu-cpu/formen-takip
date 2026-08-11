@@ -21,9 +21,6 @@ from app.services.shift_analysis import month_label
 
 INSUFFICIENT_DATA_MESSAGE = "Bu dönem için değerlendirme oluşturmak adına yeterli veri bulunmamaktadır."
 
-# Bölüm 6/7/8/10'daki kategorizasyon, yeni bir eşik icat etmez — doğrudan mevcut
-# `performance_level_rules` seed adlarını kullanır (aynı desen `reporting.py::_foreman_performance`'ta
-# `level.name == "Kritik"` karşılaştırmasıyla zaten kullanılıyor).
 STRONG_LEVEL_NAMES = {"İyi", "Çok İyi", "Mükemmel"}
 IMPROVEMENT_LEVEL_NAMES = {"Geliştirilmeli", "Kritik"}
 CRITICAL_LEVEL_NAMES = {"Kritik"}
@@ -32,9 +29,6 @@ TOP_LEVEL_NAMES = {"Çok İyi", "Mükemmel"}
 _EPSILON_ABS = 1e-4
 _EPSILON_REL = 0.001
 
-# Aylık trend şekli sınıflandırması için basit, dokümante edilmiş sezgisel eşikler —
-# `shift_analysis.py::ShiftAnomalyThresholds` ile aynı ruhta: akademik bir istatistik
-# modeli değil, yönetime okunabilir bir özet sunmak için sabit bir eşik.
 _TREND_FLAT_STDEV = 3.0
 _TREND_FLAT_DIFF = 3.0
 _TREND_MIN_RELIABLE_WEEKS = 3
@@ -59,10 +53,6 @@ def is_month_completed(year: int, month: int) -> bool:
 def _compare_to_reference(
     actual: float | None, reference: float | None, success_direction_higher: bool
 ) -> dict | None:
-    """Bir (gerçekleşen, referans) çiftini yön farkındalıklı olarak karşılaştırır — referans,
-    bağlama göre kişisel/tesis hedefi veya fabrika ortalaması olabilir. `is_favorable`,
-    KPI'nın yönüne (`success_direction_higher`) göre gerçekleşenin referanstan İYİ olup
-    olmadığını taşır; ham `status` ise yalnızca sayısal büyüklük ilişkisini anlatır."""
     if actual is None or reference is None:
         return None
     diff = actual - reference

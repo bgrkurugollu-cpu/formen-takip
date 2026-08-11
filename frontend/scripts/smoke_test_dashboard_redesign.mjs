@@ -24,7 +24,6 @@ console.log("HAS Veri Yok legend:", await page.isVisible("text=Veri Yok"));
 
 await page.screenshot({ path: `${shotDir}/dashboard-redesign-top.png`, fullPage: false });
 
-// scroll down to trigger sticky filter bar and check heatmap render
 await page.evaluate(() => window.scrollTo(0, 900));
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shotDir}/dashboard-redesign-scrolled.png`, fullPage: false });
@@ -33,7 +32,6 @@ await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shotDir}/dashboard-redesign-heatmap.png`, fullPage: false });
 
-// Open the Formen filter facet and select one
 await page.evaluate(() => window.scrollTo(0, 0));
 await page.waitForTimeout(300);
 const formenButton = page.locator("button", { hasText: "Formen" }).first();
@@ -51,7 +49,6 @@ await page.waitForTimeout(300);
 console.log("HAS active filter chip strip:", await page.isVisible("text=Aktif filtreler:"));
 await page.screenshot({ path: `${shotDir}/dashboard-redesign-foreman-filter.png`, fullPage: false });
 
-// Navigate to a foreman detail page (profile)
 await page.goto(`${BASE}/foremen`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);
 await page.click("table tbody tr:first-child");

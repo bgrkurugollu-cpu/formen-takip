@@ -1,6 +1,3 @@
-"""LLM'nin tool calling modunda çağırabileceği salt okunur araçların merkezi kayıt defteri
-(allowlist). Hiçbir araç veritabanına yazmaz, SQL çalıştırmaz veya dosya sistemine erişmez —
-yalnızca `app/services/data_providers/` katmanındaki soyut sağlayıcıları çağırır."""
 
 from __future__ import annotations
 
@@ -214,9 +211,6 @@ def parse_tool_arguments(tool: ToolDefinition, raw_arguments: dict) -> BaseModel
 
 
 def list_tool_specs() -> list[dict]:
-    """LLM'e (OpenAI `tools` parametresi biçiminde) sunulacak araç tanımları. Yalnızca
-    TOOL_REGISTRY'deki allowlist'teki araçlar sunulur — model asla serbest biçimli bir
-    araç adı üretemez."""
     return [
         {
             "type": "function",

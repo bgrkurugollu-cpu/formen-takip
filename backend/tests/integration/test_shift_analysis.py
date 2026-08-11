@@ -4,9 +4,6 @@ class TestShiftAnalysisCards:
         assert client.get("/api/v1/shift-analysis/cards").status_code == 401
 
     def test_cards_response_includes_summary_in_one_request(self, client, auth_headers):
-        # `/summary` ayrı bir endpoint olarak kaldırıldı — `build_cards`'ın (aylık ham kayıt
-        # çekme + hücre gruplama + karşılaştırma) tekrar çalıştırılmasını gerektirirdi (bkz.
-        # app/api/v1/shift_analysis.py::get_cards). Artık tek istekte hem kartlar hem özet gelir.
         resp = client.get("/api/v1/shift-analysis/cards", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
@@ -35,8 +32,6 @@ class TestShiftAnalysisHeatmap:
         assert len(body["shifts"]) == 2
         assert len(body["plants"]) > 0
         assert len(body["kpis"]) > 0
-        # Tam kartezyen ızgara: her tesis x KPI kombinasyonu için tam olarak bir hücre olmalı,
-        # veri olsun olmasın (bkz. build_heatmap docstring'i — "no_data" da bir sınıflandırmadır).
         assert len(body["cells"]) == len(body["plants"]) * len(body["kpis"])
 
         for key in ("anomaly_plant_count", "critical_cell_count", "priority_plant_count", "top_kpi"):

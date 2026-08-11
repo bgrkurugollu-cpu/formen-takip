@@ -63,9 +63,6 @@ _RESPONSIBLE_UNITS = ["Üretim", "Kalite", "Bakım", "Planlama"]
 
 
 def generate_demo_analysis(anomaly: Anomaly, package: dict) -> dict:
-    """Gerçek LLM cevabına birebir aynı şemada, tespitin gerçek sayısal verilerine dayanan
-    deterministik bir demo analiz üretir. LLM devre dışıyken veya API anahtarı yokken kullanılır
-    (bkz. anomaly_analysis_service.py) — kullanıcıya arayüzde "Demo Yapay Zekâ Analizi" etiketiyle gösterilir."""
     label = ANOMALY_TYPE_LABELS[anomaly.anomaly_type]
     severity_label = SEVERITY_LABELS[anomaly.severity.value]
     plant_name = package["anomaly"]["plant_name"] or "İlgili tesis"

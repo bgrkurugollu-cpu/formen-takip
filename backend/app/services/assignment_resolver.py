@@ -35,16 +35,6 @@ def resolve_assignment(
     plant_id: UUID,
     shifts: list[Shift],
 ) -> ResolvedAssignment:
-    """Formen+tesis+tarih için geçerli atamayı ve o tarihteki GERÇEK vardiyayı çözer.
-
-    Şef atamayı çözmez — `Plant.chief_id` her zaman o tesisin tek yetkili şefidir (bkz.
-    `fk_performance_records_plant_chief`), çağıran taraf şef uyumunu doğrudan buna karşı
-    kontrol eder. `ForemanAssignment.shift_id` bir rotasyon çıpasıdır, günlük gerçek vardiya
-    değil — bu yüzden beklenen vardiya `actual_shift_for_date` ile bu çıpadan yeniden
-    hesaplanır (bkz. app/services/shift_rotation.py). Eşleşen aktif atama yoksa (formen o
-    tesise o tarihte atanmamış ya da atama süresi dolmuş/başlamamış) `NoActiveAssignmentError`
-    fırlatılır.
-    """
     for candidate in candidates:
         if (
             candidate.is_active

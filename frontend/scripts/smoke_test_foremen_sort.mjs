@@ -20,12 +20,10 @@ await page.goto(`${BASE}/foremen`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: `${shotDir}/foremen-default.png` });
 
-// click "Toplam Puan" header to sort by score
 await page.click('button:has-text("Toplam Puan")');
 await page.waitForTimeout(800);
 await page.screenshot({ path: `${shotDir}/foremen-sorted-score-desc.png` });
 
-// click again to reverse
 await page.click('button:has-text("Toplam Puan")');
 await page.waitForTimeout(800);
 await page.screenshot({ path: `${shotDir}/foremen-sorted-score-asc.png` });

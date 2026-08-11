@@ -17,7 +17,6 @@ await page.fill('input[type="password"]', "Demo!2026");
 await page.click('button[type="submit"]');
 await page.waitForSelector("text=Genel Bakış", { timeout: 15000 });
 
-// 12 aylık aralık — Türkçe harfli soyadların tamamı listede olsun
 await page.goto(`${BASE}/foremen?date_from=2025-08-01&date_to=2026-07-28`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1800);
 
@@ -32,7 +31,6 @@ await page.waitForTimeout(1800);
 console.log("Azalan ilk 6 soyad:", (await surnames()).slice(0, 6).join(", "));
 await page.screenshot({ path: `${shotDir}/name-sort-desc.png`, fullPage: true });
 
-// Tesis sütunu sayısal sıralanmalı ("10. Tesis" < "2. Tesis" olmamalı)
 await page.locator('thead button:has-text("Tesis")').click();
 await page.waitForTimeout(1800);
 const plants = (await page.locator("tbody tr td:nth-child(3)").allTextContents())
@@ -40,7 +38,6 @@ const plants = (await page.locator("tbody tr td:nth-child(3)").allTextContents()
 const monotonic = plants.every((n, i) => i === 0 || n >= plants[i - 1]);
 console.log("Tesis sırası (ilk 10):", plants.slice(0, 10).join(", "), "| artan mı:", monotonic);
 
-// Şef sütunu da Türkçe sıralanmalı
 await page.locator('thead button:has-text("Şef")').click();
 await page.waitForTimeout(1800);
 const chiefs = (await page.locator("tbody tr td:nth-child(4)").allTextContents()).map((t) => t.trim());

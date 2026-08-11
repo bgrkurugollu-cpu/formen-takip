@@ -41,17 +41,12 @@ LAST_NAMES = [
     "Dinç", "Ergün", "Güler", "Koçak", "Öztaş", "Sezer", "Tanrıverdi", "Uçar", "Sevinç", "Zorlu",
 ]
 
-# Sentetik e-posta adresleri, gerçek bir kurum domain'i çağrıştırmasın diye açıkça sahte olan
-# bu domain altında üretilir (bkz. spec bölüm 3 — İletişim Bilgileri).
 EMAIL_DOMAIN = "example.com"
 _TURKISH_CHAR_MAP = str.maketrans({
     "ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "I": "i", "İ": "i",
     "ö": "o", "Ö": "o", "ş": "s", "Ş": "s", "ü": "u", "Ü": "u",
 })
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
-# Sentetik cep telefonu üretimi için gerçek operatör bloklarına yakın, tamamen kurgusal
-# 3 haneli GSM önekleri (0 5XX ...) — gerçek bir kişiye ait olduğu izlenimi vermeyecek şekilde
-# rastgele seçilir, sabit/tekil bir numara kullanılmaz.
 _MOBILE_PREFIXES = ["501", "505", "506", "507", "530", "532", "533", "541", "542", "555"]
 
 
@@ -80,10 +75,6 @@ def _make_phone_number(rng: random.Random, used_phones: set[str]) -> str:
             used_phones.add(candidate)
             return candidate
 
-# Puan tavansız: hedef tam tutturulduğunda 100, daha iyi performansta 100'ün üzeri, daha kötüde
-# altı — manuel bir üst sınır uygulanmaz (spec rule 2.6/16). Bu sentinel yalnızca kpis.max_score
-# sütununun NOT NULL olması içindir; puanlama motoru CUSTOM_FORMULA türü için bu değeri hiç okumaz
-# (bkz. app/services/kpi_engine.py — capped_score = max(0, raw_score), tavan yok).
 _NO_CEILING_SENTINEL = 999999.99
 
 DEFAULT_KPI_SEED = [
@@ -91,7 +82,6 @@ DEFAULT_KPI_SEED = [
         code="AGIR_GITME", name="Ağır Gitme Oranı",
         description="Üretilen ürünlerin kabul edilen gramaj aralığının (alt/üst limit) dışına çıkan işaretli sapmasının, standart üretim gramajına oranı.",
         unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=False,
-        # İşaretli (over/under) değer taşıyabildiği için min_valid_value negatif — bkz. spec bölüm 3.1/4.
         default_target_value=1.5, min_valid_value=-100, max_valid_value=100,
         min_score=0, max_score=_NO_CEILING_SENTINEL, weight=20, is_critical=True, display_order=1,
         rule_params={"formula_type": "SIGNED_ABSOLUTE_PIECEWISE", "good_coefficient": 9, "bad_coefficient": 12},
@@ -131,13 +121,8 @@ DEFAULT_KPI_SEED = [
         code="PLANA_UYUM", name="Plana Uyum Oranı",
         description="Gerçekleşen üretimin, güncel (revize) üretim planına göre yönlü sapması (planın üzerinde üretim ödüllendirilir, planın altında üretim daha güçlü cezalandırılır).",
         unit="%", calculation_type=CalculationType.CUSTOM_FORMULA, success_direction_higher=True,
-        # Bu KPI'nın puanı planned/actual miktarlardan doğrudan hesaplanır (bkz. score_plan_achievement);
-        # default_target_value/kpi_targets yalnızca "bu KPI bu kapsamda yapılandırılmış mı" kontrolü
-        # için tutulur (spec rule 10/11), formüle girmez.
         default_target_value=100.0, min_valid_value=0, max_valid_value=300,
         min_score=0, max_score=_NO_CEILING_SENTINEL, weight=20, is_critical=True, display_order=5,
-        # v3 (asimetrik): plan altı hala cezalandırılır (daha güçlü), plan üstü artık ödüllendirilir
-        # (bkz. kpi_engine.py::score_plan_achievement) — v1/v2'nin simetrik modelinin yerini alır.
         rule_params={
             "formula_type": "ASYMMETRIC_PLAN_ACHIEVEMENT",
             "target_score": 100, "positive_linear_limit": 5.0,
@@ -294,12 +279,6 @@ def seed_reference_data(
     used_foreman_emails: set[str] = set()
     used_foreman_phones: set[str] = set()
 
-    # Bir şef artık tek bir tesise değil, aynı fabrika içindeki tesislerden oluşan sabit bir
-    # bölgeye ("zone") sorumludur. Bu bölge aynı zamanda o bölgedeki her formenin (her vardiya
-    # çıpası için bir tane) sorumlu olduğu tesis kümesidir — böylece bir formenin tüm
-    # ForemanAssignment satırları her zaman AYNI (tek) şefi taşır; "bir formen birden fazla
-    # şefe bağlı kalamaz" kuralı üretim anında garanti edilir, DB'de de
-    # (plant_id, chief_id) kompozit FK'siyle desteklenir.
     zones: list[tuple[Chief, list[Plant]]] = []
     sequence_number = 0
     for spec in FACTORY_SEED:
@@ -351,11 +330,6 @@ def seed_reference_data(
 
     ref.plants.sort(key=lambda p: p.sequence_number)
 
-    # Her bölge için 2 formen (biri V1, diğeri V2 "çıpalı") üretilir; sorumlu oldukları
-    # tesisler bölgenin TÜM tesisleridir. `shift_id` artık formenin KALICI vardiyası değil,
-    # tenure'ının ilk haftasında hangi vardiyada başladığını gösteren bir çıpadır — gerçek
-    # günlük vardiya haftalık olarak dönüşümlüdür (bkz. app/services/shift_rotation.py,
-    # kullanımı için production_generator.py).
     foreman_idx_by_shift: dict[str, int] = {}
     for shift in ref.shifts:
         for chief, zone_plants in zones:
@@ -397,9 +371,6 @@ def seed_reference_data(
                 db.add(assignment)
                 ref.assignments.append(assignment)
 
-    # Tesis bazlı hedefler: her tesisin kendi hedefi vardır (COMPANY hedefi yalnızca
-    # kaynaktan/tesisten hedef gelmediğinde devreye giren bir fallback'tir — bkz.
-    # app/services/target_resolver.py FOREMAN>CHIEF>PLANT>COMPANY önceliği).
     for plant in ref.plants:
         for kpi in ref.kpis:
             base = float(kpi.default_target_value)
@@ -434,9 +405,6 @@ def regenerate_personnel_identities(db: Session, rng: random.Random) -> tuple[in
     )
 
     shifts = {s.id: s for s in db.scalars(select(Shift))}
-    # `shift_code_by_foreman` formenin ilk atamasındaki vardiya ÇIPASINI taşır (bkz.
-    # shift_rotation.py) — formenin bugünkü gerçek vardiyası değil, sadece kimlik/isimlendirme
-    # amaçlı stabil bir gruplama anahtarıdır.
     shift_code_by_foreman: dict = {}
     primary_seq_by_foreman: dict = {}
     for assignment in db.scalars(select(ForemanAssignment).order_by(ForemanAssignment.start_date)):

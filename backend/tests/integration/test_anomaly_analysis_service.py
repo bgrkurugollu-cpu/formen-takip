@@ -38,9 +38,6 @@ _VALID_LLM_RESPONSE = {
 
 class TestRunAnalysisWithRealLlm:
     def test_wrapped_response_is_unwrapped_and_accepted(self, db_session, monkeypatch):
-        """Bazı modeller talimata rağmen cevabı {"analysis": {...}} gibi tek anahtarlı bir
-        sarmalayıcı içine koyuyor (gerçek bir OpenAI çağrısında gözlemlendi) — bu artık
-        reddedilmemeli, otomatik olarak açılıp doğrulanmalı."""
         _enable_llm(monkeypatch)
         monkeypatch.setattr(llm_service, "call_llm", lambda *a, **k: {"analysis": dict(_VALID_LLM_RESPONSE)})
 

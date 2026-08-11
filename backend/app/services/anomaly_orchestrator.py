@@ -1,15 +1,3 @@
-"""Tool calling destekli analiz orkestratörü (`AnomalyAnalysisOrchestrator`).
-
-Akış:
-1. Kısa bir iç araştırma planı üretilir (kullanıcıya gösterilmez, `AnomalyAnalysis.investigation_plan`'a kaydedilir).
-2. LLM'e yalnızca tespitin özeti + kullanılabilir araçlar verilir (tüm bağlam paketi gönderilmez).
-3. LLM, ihtiyaç duyduğu araçları (allowlist'teki salt-okunur araçlardan) çağırır; her çağrı
-   doğrulanır, çalıştırılır, sonucu modele geri gönderilir ve `AnomalyToolCall` olarak kaydedilir.
-4. Araç çağrı/adım/süre sınırlarından biri aşılınca veya model kendiliğinden durunca, modelden
-   nihai yapılandırılmış analiz ayrıca istenir (strict JSON şema ile) ve doğrulanır.
-5. Kaynak referansları (`source_refs`), gerçekten yapılmış tool çağrılarıyla eşleşmeyenler
-   ayıklanarak temizlenir — LLM'nin uydurduğu referanslar kabul edilmez.
-"""
 
 from __future__ import annotations
 
@@ -82,7 +70,7 @@ class InvestigationPlan(BaseModel):
 
 
 class AnalysisTimeoutError(Exception):
-    """Analiz, LLM_ANALYSIS_TIMEOUT_SECONDS içinde tamamlanamadı."""
+    pass
 
 
 @dataclass
@@ -216,8 +204,6 @@ class AnomalyAnalysisOrchestrator:
                 for tc in tool_calls:
                     if time.monotonic() > deadline or self._tool_call_count >= self.settings.llm_max_tool_calls:
                         limit_reached = True
-                        # Model daha fazla araç çağırmak istedi ama sınıra ulaşıldı — her tool_call_id
-                        # için bir cevap zorunlu olduğundan kontrollü bir "sınır aşıldı" hatası döndürülür.
                         messages.append(_tool_result_message(tc, ToolError(
                             ToolErrorCode.LLM_TOOL_LOOP_LIMIT, "Analiz araç/süre sınırına ulaşıldı."
                         ).to_dict()))
@@ -252,7 +238,7 @@ class AnomalyAnalysisOrchestrator:
             )
             plan = InvestigationPlan.model_validate(json.loads(message["content"]))
             return plan.investigation_plan
-        except Exception as exc:  # plan adımı en kötü ihtimalle boş döner, analiz yine de devam eder
+        except Exception as exc:
             logger.warning("Analiz planı adımı başarısız oldu, plansız devam ediliyor: %s", exc)
             return []
 
@@ -297,7 +283,7 @@ class AnomalyAnalysisOrchestrator:
             duration_ms = round((time.monotonic() - perf_start) * 1000)
             self._save_tool_call(analysis, tool_name, raw_args, "error", None, None, exc, started, duration_ms)
             return exc.to_dict()
-        except Exception as exc:  # LLM'in veri uydurmaması için beklenmeyen hatalar da yapılandırılmış döner
+        except Exception as exc:
             duration_ms = round((time.monotonic() - perf_start) * 1000)
             logger.exception("Beklenmeyen tool hatası: %s", tool_name)
             err = ToolError(ToolErrorCode.TOOL_DATA_NOT_FOUND, "Araç beklenmeyen bir hatayla karşılaştı.")
@@ -383,8 +369,6 @@ class AnomalyAnalysisOrchestrator:
 
 
 def _strip_message(message: dict) -> dict:
-    """OpenAI mesaj nesnesini, konuşma geçmişine geri eklenebilecek minimal role/content/
-    tool_calls alanlarına indirger (bazı sağlayıcılar ekstra alanlar döndürebilir)."""
     stripped = {"role": message.get("role", "assistant"), "content": message.get("content")}
     if message.get("tool_calls"):
         stripped["tool_calls"] = message["tool_calls"]

@@ -302,7 +302,6 @@ class TestToolCallingUnsupportedFallback:
         analysis = run_analysis(db_session, anomaly, mode=AnalysisMode.TOOL_CALLING)
 
         assert analysis.mode == AnalysisMode.SINGLE_CONTEXT
-        # Düşüş gerçekleştiği için şeffaflık amacıyla "uyarılarla tamamlandı" işaretlenir.
         assert analysis.status == AnomalyAnalysisStatus.COMPLETED_WITH_WARNINGS
         assert analysis.result["executive_summary"] == _VALID_RESULT["executive_summary"]
 

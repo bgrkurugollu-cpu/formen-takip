@@ -23,7 +23,6 @@ for (const theme of ["light", "dark"]) {
   await page.screenshot({ path: `${shotDir}/kpi-scatter-${theme}.png`, fullPage: true });
   console.log("saved full page", theme);
 
-  // Click the ISKARTA pill (has a mix of tiers) and hover a dot for tooltip screenshot.
   const iskartaBtn = page.locator("button", { hasText: "Iskarta" });
   if (await iskartaBtn.count()) {
     await iskartaBtn.first().click();

@@ -63,9 +63,6 @@ class TestChiefDetail:
         assert client.get(f"/api/v1/chiefs/{uuid.uuid4()}", headers=auth_headers).status_code == 404
 
     def test_score_is_recomputed_from_chief_totals_not_averaged(self, client, auth_headers, db_session):
-        # Şef ekip puanı, formen puanlarının basit ortalaması DEĞİL; şefin sorumluluğundaki
-        # tüm kayıtların toplam pay/paydasından (KPI kırılımı üzerinden ağırlıklı geometrik
-        # ortalama ile) yeniden hesaplanır — bkz. app/services/analytics.py::chief_team_scores.
         listing = client.get(
             "/api/v1/chiefs",
             params={**PERIOD, "sort_by": "foreman_count", "sort_dir": "desc", "page_size": 5},
@@ -120,9 +117,6 @@ class TestChiefDetail:
 
 class TestChiefPlantConsistency:
     def test_chief_plants_all_belong_to_the_same_factory(self, client, auth_headers, db_session):
-        # Bir şef birden fazla tesise sorumlu olabilir, ama bu tesislerin hepsi aynı fabrikaya
-        # ait olmalıdır (bkz. reference_data.py::seed_reference_data — bölgeler fabrika sınırını
-        # aşmaz).
         plants_by_id = {str(p.id): p for p in db_session.scalars(select(Plant))}
         body = client.get("/api/v1/chiefs", params={**PERIOD, "page_size": 200}, headers=auth_headers).json()
         for item in body["items"]:
@@ -131,8 +125,6 @@ class TestChiefPlantConsistency:
             assert plant_factory_ids == {item["factory"]["id"]}
 
     def test_every_foreman_belongs_to_exactly_one_chief(self, db_session):
-        # "Bir formen birden fazla şefe bağlı kalamaz" — bir formenin tüm ForemanAssignment
-        # satırları her zaman aynı chief_id'yi taşımalıdır.
         assignments = list(db_session.scalars(select(ForemanAssignment)))
         chiefs_by_foreman: dict = {}
         for a in assignments:

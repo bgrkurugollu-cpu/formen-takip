@@ -1,9 +1,3 @@
-"""Aktif veri sağlayıcı paketini döndüren tek fabrika noktası.
-
-Bugün her zaman sentetik implementasyonları döndürür. İleride gerçek Ocean/ML servisleri
-eklendiğinde, yalnızca bu fonksiyonun içi (hangi sınıfın örnekleneceği) değişir — tool
-tanımları (`app/services/tools/definitions.py`) ve LLM'e sunulan araç şemaları hiç değişmez,
-çünkü hepsi `base.py`'deki soyut arayüzlere karşı yazılmıştır."""
 
 from __future__ import annotations
 

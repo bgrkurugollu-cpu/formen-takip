@@ -1,6 +1,3 @@
-"""`base.py`'deki arayüzlerin sentetik implementasyonları. Her sınıf yalnızca
-`app/services/synthetic/world.py`'deki belirleyici fonksiyonları çağırır — kendi başına
-rastgele/tutarsız veri üretmez."""
 
 from __future__ import annotations
 
@@ -52,7 +49,7 @@ class SyntheticKPIDataProvider(KPIDataProvider):
             points = daily
         elif granularity == "weekly":
             points = _bucket(daily, 7)
-        else:  # "shift" granülaritesi: tek vardiya seçiliyse günlük seriyle aynıdır
+        else:
             points = daily if shift is not None else _bucket(daily, 1)
 
         return {

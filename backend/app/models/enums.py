@@ -198,7 +198,7 @@ class AnomalyStatus(str, enum.Enum):
 
 class AnomalyAnalysisStatus(str, enum.Enum):
     NOT_ANALYZED = "not_analyzed"
-    ANALYZING = "analyzing"  # yalnızca single_context modu; tool_calling daha ayrıntılı durumlar kullanır
+    ANALYZING = "analyzing"
     QUEUED = "queued"
     PLANNING = "planning"
     COLLECTING_DATA = "collecting_data"

@@ -28,7 +28,6 @@ async function pickFactory(label) {
   await page.waitForTimeout(2000);
 }
 
-// ---- Formenler sayfası ----
 await page.goto(`${BASE}/foremen`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);
 const beforeTotal = (await page.locator("text=/Toplam \\d+ formen/").first().textContent())?.trim();
@@ -39,7 +38,6 @@ await page.screenshot({ path: `${shotDir}/factory-k2-foremen.png`, fullPage: tru
 const afterTotal = (await page.locator("text=/Toplam \\d+ formen/").first().textContent())?.trim();
 console.log("K2 seçili:", afterTotal);
 
-// Sayfadaki Tesis sütunu değerleri 28-50 aralığında olmalı (K2 = 28..50)
 const plantCells = await page.locator("tbody tr td:nth-child(3)").allTextContents();
 const seqs = plantCells.map((t) => parseInt(t.trim(), 10)).filter((n) => !Number.isNaN(n));
 console.log("Sayfadaki tesis no aralığı:", Math.min(...seqs), "-", Math.max(...seqs), "| örnek:", plantCells.slice(0, 5).map(s => s.trim()));
@@ -48,7 +46,6 @@ console.log("K1'e ait (28'den küçük) satır sayısı:", seqs.filter((n) => n 
 const zeroScores = (await page.locator("tbody tr").allTextContents()).filter((t) => /\b0[.,]00\b/.test(t)).length;
 console.log("Puanı 0,00 görünen satır sayısı:", zeroScores);
 
-// ---- Tesisler sayfası (filtre URL parametreleriyle taşınır) ----
 const params = new URL(page.url()).search;
 await page.goto(`${BASE}/plants${params}`, { waitUntil: "networkidle" });
 await page.waitForTimeout(2000);

@@ -149,8 +149,6 @@ def list_foremen(
         min_plant_seq = min(
             (plants_by_id[a.plant_id].sequence_number for a in assignments), default=-1
         )
-        # Bir formen artık her zaman TEK bir şefe bağlı olduğundan (bkz. Organizasyon
-        # Hiyerarşisi), tüm atamalar aynı şefi taşır — ilkini almak yeterlidir.
         chief_name = assignment_items[0]["chief"]["name"] if assignment_items else ""
         f_level = resolve_performance_level(score, levels)
         full_items.append(
@@ -200,8 +198,6 @@ def get_foreman(
     plants_by_id = {p.id: p for p in db.scalars(select(Plant).where(Plant.id.in_({a.plant_id for a in assignments})))}
     chiefs_by_id = {c.id: c for c in db.scalars(select(Chief).where(Chief.id.in_({a.chief_id for a in assignments})))}
     assignment_items = _assignments_to_dict(assignments, plants_by_id, chiefs_by_id)
-    # "Tesis İçi Sıralaması" formen birden fazla tesise bağlı olabileceğinden, sıralama
-    # yalnızca formenin en düşük sıra numaralı (birincil) tesisine göre hesaplanır.
     primary_plant = min(
         (plants_by_id[a.plant_id] for a in assignments), key=lambda p: p.sequence_number, default=None
     )
@@ -269,9 +265,6 @@ def foreman_kpis(
             "data_quality_status": "complete" if row["record_count"] > 0 else "missing",
             "source_system": "SYNTHETIC",
         }
-        # KPI'a özel ek alanlar (spec bölüm 14) — mevcut dönemsel toplamlardan (yeni sorgu gerektirmeden)
-        # türetilir; ham teknik/imalat/diğer dakika kırılımı veya plan/fiili ayrı miktarları gibi daha
-        # ayrıntılı alanlar bilinçli olarak kapsam dışı bırakıldı.
         if kpi.code == "AGIR_GITME" and avg_actual is not None:
             direction = "OVERWEIGHT" if avg_actual > 0 else ("UNDERWEIGHT" if avg_actual < 0 else "ON_TARGET")
             item["agir_gitme"] = {
@@ -403,12 +396,6 @@ def assignment_history(foreman_id: UUID, db: Session = Depends(get_db), _=Depend
 def foreman_contribution_summary(
     foreman_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)
 ) -> dict:
-    """Formen detay sayfasındaki kompakt Katkı ve İyileştirme Çalışmaları kartı için hafif özet.
-
-    Yalnızca yayımlanmış çalışmalar dahil edilir. Ortak çalışmalarda maddi kazanç ve zaman
-    tasarrufu, formen kendi tek başına ürettiği kazanç gibi gösterilmesin diye çalışmadaki
-    formen sayısına eşit bölünerek (pay bulunmuyorsa otomatik eşit dağıtım) toplanır.
-    """
     if db.get(Foreman, foreman_id) is None:
         raise HTTPException(404, "Formen bulunamadı.")
 

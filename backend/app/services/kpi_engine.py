@@ -9,9 +9,6 @@ from app.models.enums import CalculationType
 WEIGHT_SUM_TOLERANCE = 0.01
 DEFAULT_BASE_SCORE = 100.0
 
-# Genel puan için: kapsanan ağırlık bu oranın altındaysa genel puan üretilmez (spec bölüm 10 —
-# "eksik KPI sayısı izin verilen sınırı aşarsa genel puan üretme"). Spec bir sayı vermediği için
-# burada tek bir yerde tutulan, ayarlanabilir bir varsayılan.
 MIN_COVERED_WEIGHT_RATIO = 0.5
 
 
@@ -85,12 +82,6 @@ def proportional_penalty(
 
 
 
-# ---------------------------------------------------------------------------------------------
-# KPI'a özel puanlama formülleri (spec bölüm 4-8). Her formül yalnızca kendi katsayılarını alır —
-# kpi_calculation_rules.parameters içindeki formula_type + katsayılar, calculate_custom_score
-# üzerinden buraya yönlendirilir. Nihai puan yalnızca 0'da taban görür (rule 6/7) — manuel bir üst
-# sınır uygulanmaz.
-# ---------------------------------------------------------------------------------------------
 
 
 def _heavy_weight_from_ratio(ratio: float, good_coefficient: float, bad_coefficient: float) -> float:
@@ -100,8 +91,6 @@ def _heavy_weight_from_ratio(ratio: float, good_coefficient: float, bad_coeffici
 
 
 def score_heavy_weight(actual: float, target: float, good_coefficient: float = 9.0, bad_coefficient: float = 12.0) -> ScoreResult:
-    """Ağır Gitme (bölüm 4). `actual` işaretlidir (OVERWEIGHT pozitif, UNDERWEIGHT negatif);
-    puanlamada mutlak büyüklüğü kullanılır."""
     if target is None or target <= 0:
         raise KpiCalculationError("Ağır Gitme hedefi sıfır, negatif veya eksik olamaz.")
     raw = _heavy_weight_from_ratio(abs(actual) / target, good_coefficient, bad_coefficient)
@@ -109,7 +98,6 @@ def score_heavy_weight(actual: float, target: float, good_coefficient: float = 9
 
 
 def score_heavy_weight_from_period_ratio(period_ratio: float, good_coefficient: float = 9.0, bad_coefficient: float = 12.0) -> ScoreResult:
-    """Dönemsel Ağır Gitme (bölüm 11.4): üretim ağırlıklı oran zaten hesaplanmış olarak gelir."""
     raw = _heavy_weight_from_ratio(max(0.0, period_ratio), good_coefficient, bad_coefficient)
     return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
 
@@ -126,19 +114,16 @@ def _hybrid_base_piecewise_log(
 
 
 def score_gsf(actual: float, target: float, minimum_normalization_base: float = 0.05, good_coefficient: float = 10.0, bad_coefficient: float = 16.0) -> ScoreResult:
-    """GSF (bölüm 5): geri kazanılamayan nihai kayıp — Iskarta'dan daha sert puanlanır."""
     raw = _hybrid_base_piecewise_log(actual, target, minimum_normalization_base, good_coefficient, bad_coefficient)
     return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
 
 
 def score_inkita(actual: float, target: float, minimum_normalization_base: float = 0.50, good_coefficient: float = 6.0, bad_coefficient: float = 10.0) -> ScoreResult:
-    """İnkita (bölüm 7): `actual` yalnızca Teknik% + İmalat% toplamı olmalı — Diğer% dahil edilmez."""
     raw = _hybrid_base_piecewise_log(actual, target, minimum_normalization_base, good_coefficient, bad_coefficient)
     return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
 
 
 def score_iskarta(actual: float, target: float, good_coefficient: float = 12.0, bad_coefficient: float = 12.0) -> ScoreResult:
-    """Iskarta (bölüm 6): geri dönüştürülebilir kayıp — GSF'ye göre daha yumuşak puanlanır."""
     if target is None or target <= 0:
         raise KpiCalculationError("Iskarta hedefi sıfır, negatif veya eksik olamaz.")
     ratio = actual / target
@@ -152,15 +137,11 @@ def score_iskarta(actual: float, target: float, good_coefficient: float = 12.0, 
 def _plan_compliance_from_deviation(deviation_rate: float, normal_deviation_limit: float, excess_deviation_coefficient: float) -> float:
     if deviation_rate <= normal_deviation_limit:
         return 100.0 - deviation_rate
-    # (100 - limit) ile başlar, böylece limit noktasında iki dal aynı değeri üretir (spec bölüm 8:
-    # örnekte limit=5 -> 95'ten başlar). Sabit "95" yerine limitten türetilir ki limit değişirse
-    # sıçrama oluşmasın.
     base_at_limit = 100.0 - normal_deviation_limit
     return base_at_limit - excess_deviation_coefficient * math.log2(deviation_rate / normal_deviation_limit)
 
 
 def score_plan_compliance(planned: float, actual: float, normal_deviation_limit: float = 5.0, excess_deviation_coefficient: float = 10.0) -> ScoreResult:
-    """Plana Uyum (bölüm 8): plan altı ve plan üstü sapmalar aynı formülle, mutlak sapma üzerinden."""
     if planned is None or planned <= 0:
         raise KpiCalculationError("Planlanan üretim sıfır, negatif veya eksik olamaz.")
     deviation_rate = abs(actual - planned) / planned * 100.0
@@ -169,19 +150,10 @@ def score_plan_compliance(planned: float, actual: float, normal_deviation_limit:
 
 
 def score_plan_compliance_from_period_deviation(deviation_rate: float, normal_deviation_limit: float = 5.0, excess_deviation_coefficient: float = 10.0) -> ScoreResult:
-    """Dönemsel Plana Uyum (bölüm 11.5): sapma oranı zaten mutlak farkların toplamından hesaplanmış olarak gelir."""
     raw = _plan_compliance_from_deviation(max(0.0, deviation_rate), normal_deviation_limit, excess_deviation_coefficient)
     return ScoreResult(raw_score=raw, capped_score=max(0.0, raw))
 
 
-# ---------------------------------------------------------------------------------------------
-# Plana Uyum v3 — ASİMETRİK (formula_type="ASYMMETRIC_PLAN_ACHIEVEMENT", kpi_calculation_rules
-# version 3'ten itibaren aktif). v1/v2'nin aksine planın ÜZERİNDE üretim artık bir sapma değil,
-# ödüllendirilen bir başarıdır — yalnızca planın ALTI cezalandırılır (daha güçlü bir eğimle).
-# Eski simetrik formül (`score_plan_compliance` ve üstü) kasıtlı olarak SİLİNMEDİ: geçmiş
-# kayıtları üreten kural (version <=2, is_active=False) hâlâ DB'de duruyor ve izlenebilir kalması
-# gerekiyor — bkz. kpi_calculation_rules version geçmişi.
-# ---------------------------------------------------------------------------------------------
 
 
 def _plan_achievement_from_deviation(
@@ -198,8 +170,6 @@ def _plan_achievement_from_deviation(
     if signed_deviation_pct >= 0:
         if signed_deviation_pct <= positive_linear_limit:
             return target_score + positive_points_per_percentage_point * signed_deviation_pct
-        # `base_at_limit` doğrusal daldan türetilir ki limit noktasında iki dal aynı değeri
-        # üretsin (kesintisiz geçiş) — sabit bir sayı yerine.
         base_at_limit = target_score + positive_points_per_percentage_point * positive_linear_limit
         return base_at_limit + positive_log_coefficient * math.log2(signed_deviation_pct / positive_linear_limit)
     deficit = abs(signed_deviation_pct)
@@ -210,10 +180,6 @@ def _plan_achievement_from_deviation(
 
 
 def plan_achievement_params(parameters: dict) -> dict:
-    """`kpi_calculation_rules.parameters`'tan `score_plan_achievement`/`_from_signed_deviation`e
-    geçirilecek anahtar kelime argümanlarını, iş kuralında verilen varsayılanlarla çıkarır — üç
-    çağrı noktası (ingestion/rescoring, dönemsel toplulaştırma, grafik nokta puanı) aynı kod
-    tekrarını yazmasın diye tek yerde tutulur."""
     return {
         "target_score": parameters.get("target_score", 100.0),
         "positive_linear_limit": parameters.get("positive_linear_limit", 5.0),
@@ -241,10 +207,6 @@ def score_plan_achievement(
     minimum_score: float = 0.0,
     maximum_score: float | None = None,
 ) -> ScoreResult:
-    """Plana Uyum v3 (asimetrik): planın üzerinde üretim başarı, planın altı sapmadır — plan altı
-    daha güçlü cezalandırılır (varsayılan katsayılarla plan üstü/altı aynı %'de farklı puan
-    kaybı/kazancı üretir, bilinçli bir asimetridir). %5 sınırında doğrusal ve logaritmik dallar
-    kesintisiz birleşir."""
     if planned is None or planned <= 0:
         raise KpiCalculationError("Planlanan üretim sıfır, negatif veya eksik olamaz.")
     signed_deviation = (actual - planned) / planned * 100.0
@@ -274,8 +236,6 @@ def score_plan_achievement_from_signed_deviation(
     minimum_score: float = 0.0,
     maximum_score: float | None = None,
 ) -> ScoreResult:
-    """Dönemsel Plana Uyum v3: yönlü sapma zaten hesaplanmış (bkz. analytics.py) olarak gelir —
-    tek bir kaydın değil, bir formen/dönemin ağırlıklı ortalama sapmasının puanlanması için."""
     raw = _plan_achievement_from_deviation(
         signed_deviation_pct, target_score=target_score,
         positive_linear_limit=positive_linear_limit,
@@ -311,8 +271,6 @@ _CUSTOM_FORMULA_DISPATCH = {
 
 
 def calculate_custom_score(actual: float, target: float, formula_type: str, params: dict) -> ScoreResult:
-    """AGIR_GITME/GSF/ISKARTA/INKITA için ortak giriş noktası — hepsi (actual, target) çifti alır.
-    PLANA_UYUM bunun dışındadır (planned/actual gerektirir) — bkz. `compute_score_for_rule`."""
     handler = _CUSTOM_FORMULA_DISPATCH.get(formula_type)
     if handler is None:
         raise KpiCalculationError(f"Bilinmeyen formula_type: '{formula_type}'.")
@@ -330,11 +288,6 @@ def compute_score_for_rule(
     min_score: float = 0.0,
     max_score: float = 999999.99,
 ) -> ScoreResult:
-    """Bir performans kaydı için aktif kuralın türü ne olursa olsun tek giriş noktası — ingestion.py
-    ve rescoring.py aynı bu fonksiyonu çağırır (spec rule 17: sentetik ve SAP aynı servisleri kullanır).
-    CUSTOM_FORMULA dışındaki türler mevcut generic motora (calculate_score) düşer; CUSTOM_FORMULA ise
-    formula_type'a göre yeni KPI'a özel formüllere yönlendirilir. Plana Uyum, target yerine
-    numerator/denominator'ı (fiili/planlanan miktar) kullanır."""
     if calculation_type != CalculationType.CUSTOM_FORMULA:
         rule_params = CalculationRuleParams(
             calculation_type=calculation_type, min_score=min_score, max_score=max_score, **parameters
@@ -524,12 +477,6 @@ def period_ratio_score(
     epsilon: float = 1e-9,
     max_score: float | None = None,
 ) -> float:
-    """Dönem bazlı puan: önce pay/payda toplanır, tek bir orandan tek bir puan üretilir
-    (günlük puanların ortalaması alınmaz). Bant/eşik uygulanmaz. `max_score`, yalnızca
-    gerçekleşen toplamın (neredeyse) sıfır olduğu tekil durumda (ör. dönem boyunca hiç
-    fire oluşmaması) bölme sonucunun taşmasını önleyen bir sayısal güvenlik sınırıdır —
-    normal aralıktaki puanlar bu değere hiçbir zaman yaklaşmaz, bu yüzden bir performans
-    bandı/tavanı anlamına gelmez."""
     if success_direction_higher:
         raw = 100.0 * actual_sum / max(expected_sum, epsilon)
     else:
@@ -540,9 +487,6 @@ def period_ratio_score(
 
 
 def weighted_geometric_score(component_scores: list[tuple[float, float]]) -> float:
-    """Ağırlıklı geometrik ortalama: tek bir KPI'daki aşırı yüksek puanın diğer kötü
-    sonuçları gizlemesini engeller. Yalnızca verisi bulunan bileşenler geçirilmelidir —
-    ağırlıklar kendi aralarında otomatik yeniden normalize edilir (eksik KPI durumunda)."""
     weight_sum = sum(w for _, w in component_scores)
     if weight_sum <= 0:
         return 0.0

@@ -258,14 +258,11 @@ class TestPeriodRatioScore:
         assert period_ratio_score(actual_sum=1, expected_sum=1000, success_direction_higher=False) == pytest.approx(100000)
 
     def test_max_score_only_guards_against_near_zero_actual_overflow(self):
-        # Gerçekleşen toplam sıfıra çok yakınken bölme sonucu taşabilir — max_score yalnızca
-        # bu sayısal taşmayı önler, normal aralıktaki puanları etkilemez.
         assert period_ratio_score(actual_sum=1e-12, expected_sum=1000, success_direction_higher=False, max_score=999999.99) == 999999.99
         assert period_ratio_score(actual_sum=4, expected_sum=2, success_direction_higher=False, max_score=999999.99) == pytest.approx(50)
 
 
 class TestScoreHeavyWeight:
-    """Ağır Gitme (spec bölüm 4) — beklenen değerler spec'in kendi örnekleriyle birebir eşleşir."""
 
     def test_target_met_exactly(self):
         assert score_heavy_weight(0.40, 0.40).capped_score == pytest.approx(100.0)
@@ -298,7 +295,6 @@ class TestScoreHeavyWeight:
 
 
 class TestScoreGsf:
-    """GSF (spec bölüm 5) — Iskarta'dan daha sert (bad_coefficient=16 > 12)."""
 
     def test_target_met_exactly(self):
         assert score_gsf(0.35, 0.35).capped_score == pytest.approx(100.0)
@@ -325,7 +321,6 @@ class TestScoreGsf:
 
 
 class TestScoreIskarta:
-    """Iskarta (spec bölüm 6) — GSF'ye göre daha yumuşak (good=bad=12)."""
 
     def test_target_met_exactly(self):
         assert score_iskarta(0.80, 0.80).capped_score == pytest.approx(100.0)
@@ -354,7 +349,6 @@ class TestScoreIskarta:
 
 
 class TestScoreInkita:
-    """İnkita (spec bölüm 7) — actual her zaman Teknik+İmalat toplamı olmalı, Diğer hariç."""
 
     def test_target_met_exactly(self):
         assert score_inkita(2.08, 2.08).capped_score == pytest.approx(100.0)
@@ -385,7 +379,6 @@ class TestScoreInkita:
 
 
 class TestScorePlanCompliance:
-    """Plana Uyum (spec bölüm 8) — plan altı/üstü aynı formül, %5 sınırında süreklilik."""
 
     @pytest.mark.parametrize(
         "deviation,expected",
@@ -421,8 +414,6 @@ class TestScorePlanCompliance:
 
 
 class TestScorePlanAchievement:
-    """Plana Uyum v3 (asimetrik) — planın üzerinde üretim ödüllendirilir, altı daha güçlü
-    cezalandırılır. %5 sınırında her iki dal da kesintisiz birleşir."""
 
     @pytest.mark.parametrize(
         "planned,actual,expected",
@@ -471,15 +462,12 @@ class TestScorePlanAchievement:
         assert just_above == pytest.approx(at_boundary, abs=0.01)
 
     def test_continuous_at_zero_deviation(self):
-        """Sağ ve sol daldan (S->0+, S->0-) gelen limit de tam 100'de birleşmeli."""
         just_above = score_plan_achievement(planned=100, actual=100.001).capped_score
         just_below = score_plan_achievement(planned=100, actual=99.999).capped_score
         assert just_above == pytest.approx(100.0, abs=0.01)
         assert just_below == pytest.approx(100.0, abs=0.01)
 
     def test_over_plan_and_under_plan_score_asymmetrically(self):
-        """Bilinçli asimetri (bkz. spec bölüm 6): aynı %'de plan altı, plan üstünden daha çok
-        puan kaybettirir (+10% -> ~110, -10% -> ~85 — 100'e uzaklıkları eşit değil)."""
         over = score_plan_achievement(planned=1000, actual=1100)
         under = score_plan_achievement(planned=1000, actual=900)
         assert over.capped_score == pytest.approx(110.0, abs=0.01)
@@ -546,7 +534,7 @@ class TestComputeScoreForRule:
         result = compute_score_for_rule(
             CalculationType.CUSTOM_FORMULA,
             {"formula_type": "PIECEWISE_LINEAR_LOGARITHMIC"},
-            actual=999, target=999,  # kasıtlı olarak yanlış — formül bunları hiç kullanmamalı
+            actual=999, target=999,
             numerator=15120, denominator=15120,
         )
         assert result.capped_score == pytest.approx(100.0)
@@ -555,7 +543,7 @@ class TestComputeScoreForRule:
         result = compute_score_for_rule(
             CalculationType.CUSTOM_FORMULA,
             {"formula_type": "ASYMMETRIC_PLAN_ACHIEVEMENT"},
-            actual=999, target=999,  # kasıtlı olarak yanlış — formül bunları hiç kullanmamalı
+            actual=999, target=999,
             numerator=1100, denominator=1000,
         )
         assert result.capped_score == pytest.approx(110.0, abs=0.01)
@@ -571,7 +559,6 @@ class TestComputeScoreForRule:
         assert result.capped_score == pytest.approx(95.0)
 
     def test_no_ceiling_even_for_very_good_performance(self):
-        # Ağır Gitme'de actual=0 -> raw=109; hiçbir manuel tavan uygulanmamalı (spec rule 6/16).
         result = compute_score_for_rule(
             CalculationType.CUSTOM_FORMULA,
             {"formula_type": "SIGNED_ABSOLUTE_PIECEWISE", "good_coefficient": 9, "bad_coefficient": 12},
@@ -586,14 +573,12 @@ class TestWeightedGeometricScore:
         assert weighted_geometric_score([(100.0, 50.0), (100.0, 50.0)]) == pytest.approx(100)
 
     def test_low_score_pulls_average_down_more_than_arithmetic_mean(self):
-        # Geometrik ortalama, tek bir çok yüksek KPI'nın diğer kötü sonucu gizlemesini engeller.
         geometric = weighted_geometric_score([(200.0, 50.0), (50.0, 50.0)])
         arithmetic = (200.0 * 0.5) + (50.0 * 0.5)
         assert geometric == pytest.approx(100.0)
         assert geometric < arithmetic
 
     def test_missing_components_renormalize_weights(self):
-        # Sadece iki KPI'nın verisi varsa, ağırlıkları kendi aralarında 100'e tamamlanır.
         assert weighted_geometric_score([(100.0, 30.0), (100.0, 20.0)]) == pytest.approx(100)
 
     def test_no_components_returns_zero(self):

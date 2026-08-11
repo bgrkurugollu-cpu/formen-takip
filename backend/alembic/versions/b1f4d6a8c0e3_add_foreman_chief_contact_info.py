@@ -1,10 +1,3 @@
-"""add foreman/chief contact info (phone_number, email)
-
-Revision ID: b1f4d6a8c0e3
-Revises: a8e2c4f6b1d3
-Create Date: 2026-08-10 00:00:00.000000
-
-"""
 from typing import Sequence, Union
 
 from alembic import op

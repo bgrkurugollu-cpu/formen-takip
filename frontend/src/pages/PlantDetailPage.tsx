@@ -18,9 +18,6 @@ export function PlantDetailPage() {
   const { filters, setFilters, clearFilters, asQueryParams } = useFilters();
   const navigate = useNavigate();
   const location = useLocation();
-  // Bu sayfadan bir KPI'a ya da vardiyaya gidildiğinde, görüntülenen tesis bağlamının
-  // kaybolmaması için mevcut filtrelere bu tesisin ID'si eklenir (bkz. ShiftDetailPage'deki
-  // aynı desen).
   const searchWithPlant = withSearchParam(location.search, "plant_ids", plantId ?? "");
 
   const plant = usePlantDetail(plantId);

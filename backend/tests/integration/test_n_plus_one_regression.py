@@ -32,10 +32,6 @@ def count_queries():
 
 class TestReportListQueryCount:
     def test_query_count_does_not_scale_with_distinct_requesters(self, client, auth_headers, db_session):
-        # `/reports/generate` her zaman TEK bir current_user kullanır — tek başına yeterli bir
-        # test değil, çünkü aynı id'ye tekrar tekrar `db.get()` identity-map'ten bedava döner
-        # (eski koddaki N+1'i gizler). Farklı istekçileri gerçekten ayırt etmek için satırlar
-        # burada FARKLI kullanıcılarla doğrudan ekleniyor.
         now = datetime.now(timezone.utc)
         new_ids = []
         for i in range(6):
@@ -61,9 +57,6 @@ class TestReportListQueryCount:
             assert resp.status_code == 200
             returned_ids = {i["id"] for i in resp.json()["items"]}
             assert all(str(eid) in returned_ids for _, eid in new_ids)
-            # Eski kodda rapor başına ayrı bir db.get(User, ...) vardı; 6 FARKLI istekçi eski
-            # koddan en az +6 sorgu üretirdi. Artık istekçiler tek bir IN (...) sorgusuyla toplu
-            # çekiliyor, sorgu sayısı istekçi çeşitliliğinden bağımsız kalmalı.
             assert counter["n"] <= 6, f"Beklenenden fazla sorgu: {counter['n']}"
         finally:
             db_session.execute(ReportExport.__table__.delete().where(ReportExport.id.in_([eid for _, eid in new_ids])))
@@ -77,8 +70,6 @@ class TestContributionSummaryQueryCount:
         plants = list(db_session.scalars(select(Plant).order_by(Plant.sequence_number).limit(5)))
         assert len(foremen) >= 5 and len(plants) >= 5
 
-        # Bkz. TestReportListQueryCount'taki aynı not: benzersiz jeton, önceki koşumlardan
-        # kalan kayıtların tam eşitlik doğrulamalarını bozmasını engeller.
         token = uuid.uuid4().hex[:8]
         for i in range(5):
             resp = client.post(
@@ -99,6 +90,4 @@ class TestContributionSummaryQueryCount:
             )
         assert resp.status_code == 200
         assert resp.json()["total_works"] == 5
-        # Eski kodda çalışma başına ayrı bir ContributionWorkForeman sorgusu vardı (ve bu endpoint
-        # sayfalanmıyor) — artık tek bir IN (...) sorgusuyla toplu çekiliyor.
         assert counter["n"] <= 6, f"Beklenenden fazla sorgu: {counter['n']}"
