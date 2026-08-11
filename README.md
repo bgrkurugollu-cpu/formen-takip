@@ -57,17 +57,16 @@ postgres:16 (host :5433 → container :5432)
 Bu yapı `backend/app/services/synthetic/reference_data.py` içindeki
 `FACTORY_SEED` sabitiyle kodlanmış sabit bir iş kuralıdır, yapılandırılabilir
 bir parametre değildir. Tesisler `"{n}. Tesis"` biçiminde adlandırılır ve
-1–50 arasında benzersiz bir `sequence_number` taşır — **tesisler her zaman
-`sequence_number`'a göre sıralanmalı, `name`'e göre değil** ("10. Tesis"
-alfabetik olarak "2. Tesis"ten önce gelir).
+1–50 arasında benzersiz bir `sequence_number` taşır — tesisler her zaman
+`sequence_number`'a göre sıralanmalı, `name`'e göre değil.
 
-- Her tesisin tam olarak bir şefi vardır (`Plant.chief_id`), ama bir şef artık
-  tek bir tesise değil, **aynı fabrika içindeki tesislerden oluşan sabit bir
-  bölgeye** ("zone") sorumludur (`app/services/synthetic/reference_data.py::seed_reference_data`,
+- Her tesisin tam olarak bir şefi vardır (`Plant.chief_id`), ama bir şef
+  tek bir tesise değil, aynı fabrika içindeki tesislerden oluşan sabit bir
+  bölgeden ("zone") sorumludur (`app/services/synthetic/reference_data.py::seed_reference_data`,
   her fabrikanın tesisleri `min_plants_per_foreman`–`max_plants_per_foreman`
   büyüklüğünde bölgelere ayrılır). Bu bölgedeki her formen (her vardiyada bir
-  tane, yani bir şefin **en az 2, tipik olarak 3** formeni olur) bölgenin
-  **tüm** tesislerinden sorumludur — bu yüzden bir formen hiçbir zaman birden
+  tane, yani bir şefin 2 formeni olur) bölgenin
+  tüm tesislerinden sorumludur, bu yüzden bir formen hiçbir zaman birden
   fazla şefe bağlı olamaz.
 - `Foreman` modeli organizasyon FK'sı taşımaz. Tüm yerleşim `ForemanAssignment`
   tablosunda SCD2 tarzı `start_date`/`end_date` aralıklarıyla tutulur: bir
@@ -79,9 +78,9 @@ alfabetik olarak "2. Tesis"ten önce gelir).
   imkânsız kılar.
 - Kimlikler benzersiz ve kendini açıklayan biçimde üretilir: ad/soyad çiftleri
   `FIRST_NAMES × LAST_NAMES` (80 × 70 = 5600 kombinasyon) kartezyen çarpımından
-  **yerine koymadan** (without replacement) örneklenir, böylece ~1000 kişilik
+  yerine koymadan örneklenir, böylece ~1000 kişilik
   havuzda hiçbir şef veya formen aynı tam adı taşımaz. Şef sicil numaraları
-  artık tek bir tesisi değil bölgeyi kodlar (`SEF-003`); formen sicil
+  tek bir tesisi değil bölgeyi kodlar (`SEF-003`); formen sicil
   numaraları vardiyayı kodlar (`SCL-V1-014`) — ikisi de sözlüksel sıralama
   sayısal sıralamayla eşleşsin diye sıfırla doldurulur.
 
@@ -92,14 +91,14 @@ havuzlarını değiştirdikten sonra tam yeniden seed yerine kullanılır.
 
 ## Veri Akışı: Sağlayıcı → Ingestion → Skor
 
-Performans verisi **API yüzeyinin tamamına salt okunurdur**. Ingestion
+Performans verisi API yüzeyinin tamamına salt okunurdur. Ingestion
 pipeline'ı dışında hiçbir yer `performance_records` / `performance_scores`
 tablolarını oluşturamaz, güncelleyemez veya silemez.
 
 1. `PerformanceDataProvider.fetch()` (`app/services/providers/base.py`),
    dahili UUID'ler yerine **kodlarla** (`plant_code`, `chief_employee_number`,
    `shift_code`, `foreman_employee_number`, `kpi_code`) `RawPerformanceRecord`
-   üretir. Bugün tek implementasyon `SyntheticDataProvider` — bu sınıf artık
+   üretir. Bugün tek implementasyon `SyntheticDataProvider` — bu sınıf
    **rastgele KPI değeri üretmez**: `app/services/production_kpi_derivation.py`
    üzerinden yalnızca önceden seed edilmiş `production_records` tablosunu okur
    ve ham üretim/kayıp verisinden KPI değerlerini türetir (bkz.
@@ -120,12 +119,11 @@ tablolarını oluşturamaz, güncelleyemez veya silemez.
 Veri kalitesi durumları (`DataQualityStatus`): `complete`, `missing`,
 `invalid`, `suspicious`, `duplicate`, `needs_source_correction`,
 `pending_resync`, `reprocessed`. Bu durumlar `data_quality_issues`
-tablosuna yazılmaya devam eder; yalnızca ayrı bir "Veri Kalitesi" API/ekranı
-üzerinden görüntülenmezler (aşağıdaki not).
+tablosuna yazılır.
 
 ## Üretim Verisi Katmanı
 
-`performance_records`'ın **altında**, SAP'in üretim emri/konfirmasyonu ile
+`performance_records`'ın altında, SAP'in üretim emri/konfirmasyonu ile
 göndereceği ham veriyi taklit eden salt okunur bir "ham veri" katmanı bulunur
 (`app/models/production.py`):
 
@@ -142,8 +140,8 @@ göndereceği ham veriyi taklit eden salt okunur bir "ham veri" katmanı bulunur
   miktar, ölçülen ortalama gramaj, GSF/Iskarta miktarı, Teknik/İmalat/Diğer
   duruş dakikaları, plan revizyon no'su. `performance_records`'la aynı
   idempotency deseni uygulanır (`uq_production_record_source`,
-  `uq_production_record_natural_key`). **Hiçbir KPI yüzdesi burada
-  tutulmaz** — yalnızca ham ölçüm.
+  `uq_production_record_natural_key`). Hiçbir KPI yüzdesi burada
+  tutulmaz — yalnızca ham ölçüm.
 
 `app/services/production_kpi_derivation.py::derive_raw_performance_records()`
 bu tabloları okuyup her üretim kaydından sıfır veya daha fazla
@@ -159,7 +157,7 @@ bu tabloları okuyup her üretim kaydından sıfır veya daha fazla
 
 `target_value` bu katmandan bilinçli olarak `None` gelir; `ingestion.py`
 her zaman olduğu gibi hedefi `target_resolver.resolve_target()` ile
-`kpi_targets`'tan çözer. Bu ayrım **kaynak-agnostiktir**: `production_records`
+`kpi_targets`'tan çözer. Bu ayrım kaynak-agnostiktir: `production_records`
 tablosunu sentetik üretici (`app/services/synthetic/production_generator.py`)
 yerine gerçek bir SAP sağlayıcısı doldursa bile `ingestion.py` /
 `kpi_engine.py` / `analytics.py` hiçbir değişiklik gerektirmez — yalnızca
@@ -206,7 +204,7 @@ NOT NULL kısıtı içindir; CUSTOM_FORMULA bu değeri hiç okumaz). Bu model
 formüllerle yeniden hesaplamak için:
 `docker compose exec backend python -m app.cli apply-scoring-model-v2`.
 
-Toplam (aggregate) skor **ağırlıklı geometrik ortalamayla** hesaplanır
+Toplam skor **ağırlıklı geometrik ortalamayla** hesaplanır
 (`app/services/analytics.py::_grouped_scores` →
 `kpi_engine.py::weighted_geometric_score`):
 
@@ -217,11 +215,7 @@ Toplam (aggregate) skor **ağırlıklı geometrik ortalamayla** hesaplanır
 Geometrik ortalama, tek bir KPI'daki aşırı yüksek puanın diğer kötü
 sonuçları gizlemesini engeller (aritmetik ortalamanın aksine). Kapsanan
 ağırlık, aktif toplam ağırlığın `MIN_COVERED_WEIGHT_RATIO = 0.5` katından
-azsa genel puan **üretilmez, doğrudan 0 döner** — eksik KPI'larda otomatik
-yeniden normalize eden eski davranış (`compute_weighted_total`, hâlâ
-`kpi_engine.py` içinde tanımlı ama artık hiçbir canlı yoldan çağrılmıyor)
-bu formülün yerini aldı. `is_reliable`, kapsanan ağırlığın aktif toplam
-ağırlıktan `WEIGHT_TOLERANCE` kadar bile eksik olduğu satırları işaretler.
+azsa genel puan üretilmez, doğrudan 0 döner.
 
 Skor tabanlı KPI'lar önce **dönem boyunca pay/payda toplanır**, tek bir
 orandan tek bir puan üretilir — günlük puanların ortalaması alınmaz.
@@ -281,14 +275,14 @@ tutulur.
 derecesi ve durumlarını takip etmek ve her tespit için isteğe bağlı bir yapay
 zekâ analizi üretmek. Modül iki kademede geliştirilmiştir:
 
-- **Aşama 1 — Sentetik Veriyle Prototip**: tüm bağlam LLM'ye tek pakette
+- **Aşama 1 — Sentetik Veriyle Prototip**: tüm bağlam LLM'e tek pakette
   gönderilir (`single_context` modu, aşağıda anlatılıyor).
 - **Aşama 2 — Tool Calling Destekli Analiz Ajanı**: LLM, ihtiyaç duyduğu ek
   veriyi salt-okunur backend araçlarını çağırarak kendisi toplar
   (`tool_calling` modu, [ayrı bölümde](#aşama-2--tool-calling-destekli-analiz-ajanı) anlatılıyor).
 
 İkisinde de gerçek bir ML modeli, SAP/Ocean entegrasyonu, RAG veya vektör veri
-tabanı **kullanılmaz** — tüm operasyonel veri sentetiktir.
+tabanı kullanılmaz — tüm operasyonel veri sentetiktir.
 
 ### Sentetik tespit verisi
 
@@ -323,10 +317,10 @@ değiştirilebilir, API ve frontend değişmeden kalır.
    `POST /api/v1/anomalies/{id}/analyze`.
 2. `app/services/anomaly_context.py::build_analysis_package()`, tespitin
    tüm sayısal verisini, KPI tanımını, vardiya/tesis/fabrika
-   karşılaştırmalarını, ilişkili KPI sinyallerini ve **sentetik** bağlam
+   karşılaştırmalarını, ilişkili KPI sinyallerini ve sentetik bağlam
    öğelerini (günlük geçmiş, duruş özeti, bakım sinyalleri, ürün dağılımı,
-   vardiya notları, benzer geçmiş olaylar) **tek bir JSON paketinde**
-   toplar — RAG veya tool calling yoktur, LLM'nin ihtiyaç duyacağı her şey
+   vardiya notları, benzer geçmiş olaylar) tek bir JSON paketinde
+   toplar, LLM'nin ihtiyaç duyacağı her şey
    bu tek pakette gönderilir. Formen bilgisi isim değil sicil kodu
    (`employee_number`) ile temsil edilir.
 3. `app/services/llm_service.py`, `LLM_ENABLED=true` ve `LLM_API_KEY` tanımlıysa
@@ -336,11 +330,11 @@ değiştirilebilir, API ve frontend değişmeden kalır.
    sağlayıcıya geçmek yalnızca bu dosyanın içini değiştirmeyi gerektirir).
 4. LLM cevabı (veya demo fallback çıktısı) `app/schemas/anomaly_analysis.py`
    içindeki `AnalysisResult` Pydantic şemasına karşı doğrulanır. Geçersiz
-   JSON, eksik alan veya zaman aşımı durumunda **en fazla bir kez** otomatik
+   JSON, eksik alan veya zaman aşımı durumunda en fazla bir kez otomatik
    yeniden denenir; iki deneme de başarısız olursa analiz `failed` durumuna
    geçer ve kullanıcıya jenerik bir hata mesajı gösterilir (teknik ayrıntılar
    yalnızca backend loglarında tutulur).
-5. Sonuç `anomaly_analyses` tablosuna **yeni bir satır** olarak yazılır —
+5. Sonuç `anomaly_analyses` tablosuna yeni bir satır olarak yazılır —
    önceki analizler silinmez, arayüzde varsayılan olarak en güncel analiz
    gösterilir (`GET /{id}/analysis` ve tespit detayındaki `latest_analysis`).
 
@@ -378,11 +372,10 @@ kartlar halinde görür (ham HTML render edilmez).
 
 ### Aşama 2 — Tool Calling Destekli Analiz Ajanı
 
-Aşama 1'in `single_context` yöntemi **kaldırılmadı** — `LLM_ANALYSIS_MODE`
-ayarı veya her analiz isteğinde gönderilebilen `mode` alanı (`single_context`
-| `tool_calling`) ile hangi yöntemin kullanılacağı seçilir. Frontend'de tespit
-detay ekranındaki **Hızlı Analiz / Derinlemesine Analiz** seçici bu iki moda
-karşılık gelir.
+`LLM_ANALYSIS_MODE` ayarı veya her analiz isteğinde gönderilebilen `mode` alanı 
+(`single_context`, `tool_calling`) ile hangi yöntemin kullanılacağı seçilir. 
+Frontend'de tespit detay ekranındaki **Hızlı Analiz / Derinlemesine Analiz** seçici 
+bu iki moda karşılık gelir.
 
 **Mimari akış** (`app/services/anomaly_orchestrator.py::AnomalyAnalysisOrchestrator`):
 
@@ -673,10 +666,6 @@ zincirine göre sıralı):
 `alembic upgrade head`, backend konteyneri her başladığında otomatik
 çalışır (`backend/Dockerfile` CMD'si).
 
-> `README.md`'nin önceki sürümü Türkçe bölge/il, `Department`,
-> `ProductionLine` ve `--plants` bayrağına dayanan eski bir modeli
-> tanımlıyordu. Bu kavramlar Karaman restrukturasyonuyla tamamen
-> kaldırıldı; bu belge yalnızca mevcut kodu yansıtır.
 
 ## Kurulum (Docker)
 
@@ -916,7 +905,7 @@ otomatik oluşturulmaz.)
 
 ## Bilinen Sınırlamalar / Kapsam Dışı
 
-- **Gerçek SAP entegrasyonu** yapılmamıştır. `SAPDataProvider`
+- Gerçek SAP entegrasyonu yapılmamıştır. `SAPDataProvider`
   (`app/services/providers/sap_provider.py`) yapılandırılmadığında
   `SAPNotConfiguredError`, yapılandırılsa bile `NotImplementedError`
   fırlatan bir iskelettir.
@@ -938,8 +927,7 @@ otomatik oluşturulmaz.)
 - **Tespitler modülü** (bkz. [Tespitler Modülü](#tespitler-modülü-anomali-tespiti--yapay-zekâ-analizi))
   bilinçli olarak Aşama 1 + Aşama 2 kapsamındadır: tespitler sabit
   senaryolardan sentetik olarak üretilir (gerçek bir ML modeli
-  eğitilmemiştir/kullanılmamıştır), gerçek SAP/Ocean bağlantısı yoktur, RAG
-  veya vektör veri tabanı kullanılmaz. Aşama 2'nin tool calling'i, LLM'nin
+  eğitilmemiştir/kullanılmamıştır). Aşama 2'nin tool calling'i, LLM'nin
   backend'e **serbest/dinamik** bir sorgu atmasına izin vermez — yalnızca
   önceden tanımlanmış, salt-okunur, allowlist'teki 11 aracı çağırabilir; SQL
   üretemez, veritabanına yazamaz. Gelecekte sentetik veri sağlayıcılarının
@@ -953,4 +941,4 @@ otomatik oluşturulmaz.)
   bu, veri minimizasyonu ilkesine uygun olarak özet/hash'e indirgenmelidir.
 - Analiz durum modelindeki `cancelled` değeri şema/dokümantasyon
   tamlığı için tanımlıdır ancak arayüzde bir "analizi iptal et" eylemi
-  **henüz yoktur** — hiçbir kod yolu bu durumu şu an için ayarlamaz.
+  henüz yoktur.
