@@ -3,6 +3,7 @@ import { apiClient } from "./client";
 import type {
   AnalysisMode,
   AnomalyDetail,
+  AnomalyInvestigation,
   AnomalyListItem,
   AnomalyStatus,
   AnomalySummary,
@@ -474,6 +475,14 @@ export function useUpdateAnomalyStatus() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["anomalies"] });
     },
+  });
+}
+
+export function useAnomalyInvestigation(id: string | undefined) {
+  return useQuery({
+    queryKey: ["anomalies", id, "investigation"],
+    queryFn: async () => (await apiClient.get<AnomalyInvestigation>(`/anomalies/${id}/investigation`)).data,
+    enabled: !!id,
   });
 }
 

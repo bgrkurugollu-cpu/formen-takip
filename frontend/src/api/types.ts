@@ -714,10 +714,12 @@ export interface AnomalyDailyPoint {
   value: number;
 }
 
+export type KpiDirection = "high" | "low" | null;
+
 export interface AnomalyKpiDefinition {
   name: string | null;
   description: string | null;
-  desired_direction: "high" | "low" | null;
+  desired_direction: KpiDirection;
   warning_threshold: number | null;
   critical_threshold: number | null;
 }
@@ -859,6 +861,104 @@ export interface AnomalySummary {
   pending_analysis_count: number;
   opened_last_7_days: number;
   resolved_count: number;
+}
+
+export interface ForemanRef {
+  id: string;
+  name: string;
+  employee_number: string;
+}
+
+export interface ForemanKpiTrendPoint {
+  period_label: string;
+  avg_actual: number | null;
+  has_data: boolean;
+}
+
+export interface ResponsibleForeman {
+  resolved: boolean;
+  shift_specific: boolean;
+  reason: string | null;
+  note: string | null;
+  primary: (ForemanRef & { day_count: number; total_days?: number }) | null;
+  others: (ForemanRef & { day_count: number })[];
+  kpi_trend: ForemanKpiTrendPoint[];
+}
+
+export interface BaselineComparison {
+  available: boolean;
+  reason?: string;
+  baseline_period?: { start: string; end: string; days: number };
+  current_period?: { start: string; end: string; days: number };
+  baseline_avg?: number;
+  current_avg?: number;
+  abs_change?: number;
+  pct_change?: number | null;
+  direction?: "improved" | "worsened" | "unchanged";
+}
+
+export interface RelatedKpiChange {
+  kpi: string;
+  kpi_code: string;
+  baseline_value: number;
+  current_value: number;
+  abs_change: number;
+  change_percent: number;
+  direction: "increase" | "decrease";
+  performance_direction: "improved" | "worsened" | null;
+  sparkline: number[];
+}
+
+export interface DowntimeCategory {
+  category: string;
+  total_minutes: number;
+  occurrence_count: number;
+}
+
+export interface DowntimeBreakdown {
+  plant_name: string;
+  shift_name: string;
+  period_days: number;
+  total_downtime_minutes: number;
+  total_downtime_count: number;
+  categories: DowntimeCategory[];
+  top_reasons: string[];
+  longest_single_event_minutes: number;
+  previous_period_total_minutes: number;
+  other_shifts_average_minutes: number | null;
+}
+
+export interface InvestigationImpact {
+  additional_downtime_minutes: number | null;
+  additional_downtime_note: string | null;
+  production_loss_note: string;
+  cost_note: string;
+}
+
+export interface SimilarCase {
+  anomaly_id: string;
+  anomaly_code: string;
+  title: string;
+  plant_name: string | null;
+  kpi_name: string | null;
+  anomaly_type_label: string;
+  similarity_reason: string;
+  detected_at: string;
+  resolution_status: "resolved" | "open";
+  verified_root_cause: string | null;
+  action_taken: string | null;
+  action_result: string | null;
+  kpi_value_before: number;
+  kpi_value_after: number | null;
+}
+
+export interface AnomalyInvestigation {
+  responsible_foreman: ResponsibleForeman;
+  baseline_comparison: BaselineComparison;
+  related_kpi_changes: RelatedKpiChange[];
+  downtime_breakdown: DowntimeBreakdown | null;
+  impact: InvestigationImpact;
+  similar_cases: SimilarCase[];
 }
 
 

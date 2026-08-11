@@ -501,7 +501,7 @@ def similar_historical_cases(db: Session, exclude_anomaly_id: UUID, kpi: Kpi | N
         resolved = c.status.value in ("resolved", "closed")
         results.append(
             {
-                "anomaly_code": c.code, "title": c.title,
+                "anomaly_id": str(c.id), "anomaly_code": c.code, "title": c.title,
                 "plant_name": c_plant.name if c_plant else None, "kpi_name": c_kpi.name if c_kpi else None,
                 "anomaly_type_label": ANOMALY_TYPE_LABELS.get(c.anomaly_type, c.anomaly_type.value),
                 "similarity_reason": f"Benzerlik skoru: {score} (KPI/tür/tesis eşleşmesi)",

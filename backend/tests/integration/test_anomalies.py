@@ -92,6 +92,48 @@ class TestAnomalyDetail:
             assert key in body
 
 
+class TestAnomalyInvestigation:
+    def test_unknown_id_returns_404(self, client, auth_headers):
+        assert client.get(f"/api/v1/anomalies/{uuid.uuid4()}/investigation", headers=auth_headers).status_code == 404
+
+    def test_investigation_shape(self, client, auth_headers, db_session):
+        anomaly = _sample_anomaly(db_session)
+        resp = client.get(f"/api/v1/anomalies/{anomaly.id}/investigation", headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        for key in (
+            "responsible_foreman", "baseline_comparison", "related_kpi_changes",
+            "downtime_breakdown", "impact", "similar_cases",
+        ):
+            assert key in body
+
+        foreman = body["responsible_foreman"]
+        assert "resolved" in foreman and "shift_specific" in foreman
+
+        baseline = body["baseline_comparison"]
+        assert "available" in baseline
+
+        impact = body["impact"]
+        assert "production_loss_note" in impact
+        assert "cost_note" in impact
+
+    def test_inkita_anomaly_includes_downtime_breakdown(self, client, auth_headers, db_session):
+        anomaly = db_session.scalars(select(Anomaly)).all()
+        inkita = next((a for a in anomaly if a.unit and _kpi_code(db_session, a) == "INKITA"), None)
+        if inkita is None:
+            return
+        resp = client.get(f"/api/v1/anomalies/{inkita.id}/investigation", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["downtime_breakdown"] is not None
+
+
+def _kpi_code(db_session, anomaly: Anomaly) -> str | None:
+    from app.models.kpi import Kpi
+
+    kpi = db_session.get(Kpi, anomaly.kpi_id)
+    return kpi.code if kpi else None
+
+
 class TestAnomalyAnalysis:
     def test_analysis_before_any_run_returns_404(self, client, auth_headers, db_session):
         anomaly = _fresh_anomaly(db_session)

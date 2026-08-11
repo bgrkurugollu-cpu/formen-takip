@@ -17,6 +17,7 @@ from app.models.user import User
 from app.schemas.common import PageParams, page_params
 from app.services.anomaly_analysis_service import AnalysisInProgressError, run_analysis
 from app.services.anomaly_context import build_analysis_package
+from app.services.anomaly_investigation import build_investigation
 from app.services.anomaly_kpi_defs import (
     ANALYSIS_STATUS_LABELS,
     ANOMALY_TYPE_LABELS,
@@ -251,6 +252,14 @@ def get_anomaly(anomaly_id: UUID, db: Session = Depends(get_db), _=Depends(get_c
     if anomaly is None:
         raise HTTPException(404, "Tespit bulunamadı.")
     return _to_detail_dict(db, anomaly)
+
+
+@router.get("/{anomaly_id}/investigation")
+def get_anomaly_investigation(anomaly_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
+    anomaly = db.get(Anomaly, anomaly_id)
+    if anomaly is None:
+        raise HTTPException(404, "Tespit bulunamadı.")
+    return build_investigation(db, anomaly)
 
 
 @router.get("/{anomaly_id}/analysis")
