@@ -5,12 +5,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.turkish import turkish_sort_key
 from app.db.session import get_db
 from app.models.foreman import Chief, Foreman, ForemanAssignment
 from app.models.kpi import Kpi
 from app.models.organization import Factory, Plant, Shift
 from app.schemas.common import Filters, PageParams, common_filters, page_params
-from app.services import analytics
+from app.services import analytics, shift_analysis
 from app.services.kpi_engine import resolve_performance_level
 from app.services.level_lookup import get_performance_levels, level_to_dict
 
@@ -29,6 +30,8 @@ def list_plants(
     search: str | None = Query(None),
     factory_id: UUID | None = Query(None),
     is_active: bool | None = Query(None),
+    sort_by: str = Query("sequence", pattern="^(sequence|name|factory|active_foreman_count|score|level)$"),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
     page: PageParams = Depends(page_params),
     filters: Filters = Depends(common_filters),
     db: Session = Depends(get_db),
@@ -49,33 +52,52 @@ def list_plants(
         query = query.where(Plant.id.in_(filters.plant_ids))
 
     all_plants = list(db.scalars(query.order_by(Plant.sequence_number)))
-    total = len(all_plants)
-    start = (page.page - 1) * page.page_size
-    page_plants = all_plants[start : start + page.page_size]
 
     scores_by_plant = {s.key: s for s in analytics.plant_scores(db, filters)}
     factories_by_id = {f.id: f for f in db.scalars(select(Factory))}
+    active_foreman_counts = dict(
+        db.execute(
+            select(ForemanAssignment.plant_id, func.count(func.distinct(ForemanAssignment.foreman_id)))
+            .join(Foreman, Foreman.id == ForemanAssignment.foreman_id)
+            .where(Foreman.is_active.is_(True))
+            .group_by(ForemanAssignment.plant_id)
+        ).all()
+    )
 
-    items = []
-    for p in page_plants:
+    full_items = []
+    for p in all_plants:
         gs = scores_by_plant.get(p.id)
         score = gs.total_score if gs else 0.0
-        active_foremen = db.scalar(
-            select(func.count(func.distinct(ForemanAssignment.foreman_id)))
-            .join(Foreman, Foreman.id == ForemanAssignment.foreman_id)
-            .where(ForemanAssignment.plant_id == p.id, Foreman.is_active.is_(True))
-        )
+        active_foremen = active_foreman_counts.get(p.id, 0)
         factory = factories_by_id.get(p.factory_id)
-        items.append(
+        level = resolve_performance_level(score, levels)
+        full_items.append(
             {
                 "id": str(p.id), "code": p.code, "name": p.name, "sequence_number": p.sequence_number,
                 "factory": {"id": str(factory.id), "code": factory.code, "name": factory.name} if factory else None,
                 "is_active": p.is_active, "total_score": round(score, 2),
-                "level": level_to_dict(resolve_performance_level(score, levels)),
-                "active_foreman_count": active_foremen or 0,
+                "level": level_to_dict(level),
+                "active_foreman_count": active_foremen,
                 "record_count": gs.record_count if gs else 0,
+                "_sort": {
+                    "sequence": p.sequence_number,
+                    "name": turkish_sort_key(p.name),
+                    "factory": turkish_sort_key(factory.name) if factory else (),
+                    "active_foreman_count": active_foremen,
+                    "score": score,
+                    "level": level.sort_order,
+                },
             }
         )
+
+    reverse = sort_dir == "desc"
+    full_items.sort(key=lambda it: it["_sort"][sort_by], reverse=reverse)
+    for it in full_items:
+        del it["_sort"]
+
+    total = len(full_items)
+    start = (page.page - 1) * page.page_size
+    items = full_items[start : start + page.page_size]
     return {"items": items, "total": total, "page": page.page, "page_size": page.page_size}
 
 
@@ -203,6 +225,51 @@ def plant_chiefs(
             }
         )
     return {"items": items}
+
+
+@router.get("/{plant_id}/foreman-shift-matrix")
+def plant_foreman_shift_matrix(
+    plant_id: UUID,
+    kpi_id: UUID = Query(...),
+    filters: Filters = Depends(common_filters),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+) -> dict:
+    matrix = shift_analysis.build_foreman_shift_matrix(db, filters, plant_id, kpi_id)
+    if matrix is None:
+        raise HTTPException(404, "Bu tesis/KPI kombinasyonu için formen-vardiya karşılaştırması yapılacak veri bulunamadı.")
+
+    levels = get_performance_levels(db)
+
+    def cell_dict(cell: shift_analysis.ForemanShiftCell | None) -> dict | None:
+        if cell is None:
+            return None
+        deviation_pct = (
+            (cell.avg_actual - cell.avg_target) / abs(cell.avg_target) * 100.0 if cell.avg_target else None
+        )
+        return {
+            "avg_actual": round(cell.avg_actual, 2), "avg_target": round(cell.avg_target, 2),
+            "score": round(cell.capped_score, 2), "record_count": cell.record_count,
+            "deviation_pct": round(deviation_pct, 1) if deviation_pct is not None else None,
+            "level": level_to_dict(resolve_performance_level(cell.capped_score, levels)),
+        }
+
+    return {
+        "kpi": {
+            "id": str(matrix.kpi_id), "code": matrix.kpi_code, "name": matrix.kpi_name, "unit": matrix.kpi_unit,
+            "success_direction_higher": matrix.success_direction_higher,
+        },
+        "reference_target": round(matrix.reference_target, 2),
+        "shifts": [{"id": str(s.id), "code": s.code, "name": s.name} for s in matrix.shifts],
+        "rows": [
+            {
+                "foreman_id": str(row.foreman_id), "full_name": row.name, "employee_number": row.employee_number,
+                "cells": {str(shift_id): cell_dict(cell) for shift_id, cell in row.cells.items()},
+            }
+            for row in matrix.rows
+        ],
+        "insight": matrix.insight,
+    }
 
 
 @router.get("/{plant_id}/foremen")

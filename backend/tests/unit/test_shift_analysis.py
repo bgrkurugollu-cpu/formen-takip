@@ -5,11 +5,16 @@ import pytest
 
 from app.services.shift_analysis import (
     ForemanCellStat,
+    ForemanShiftCell,
+    ForemanShiftRow,
     ShiftAnomalyThresholds,
+    _build_matrix_insight,
     _compare_pair,
     _extreme_pair,
     _is_consistent_pattern,
+    _shift_diff_classification,
     _week_index,
+    classify_diff_level,
     month_label,
     previous_completed_month,
 )
@@ -20,6 +25,19 @@ def make_stat(avg_actual: float, record_count: int = 10, week_indices: list[int]
         foreman_id=uuid4(), avg_actual=avg_actual, record_count=record_count,
         week_indices=week_indices if week_indices is not None else [0, 1],
     )
+
+
+class _StubShift:
+    """`_build_matrix_insight` yalnızca `.id` ve `.name`'e ihtiyaç duyar — gerçek `Shift` ORM
+    modelini (Time sütunları, DB bağlantısı gerektirmeyen) kurmak yerine hafif bir stub yeterli."""
+
+    def __init__(self, name: str):
+        self.id = uuid4()
+        self.name = name
+
+
+def make_shift(name: str) -> _StubShift:
+    return _StubShift(name)
 
 
 class TestPreviousCompletedMonth:
@@ -200,3 +218,156 @@ class TestIsConsistentPattern:
             {"foreman_id": worse_id, "avg_actual": 10.0},
         ]
         assert _is_consistent_pattern(points, better_id, worse_id, higher_is_better=False) is True
+
+
+class TestClassifyDiffLevel:
+    """Heatmap sınıflandırması — `_compare_pair` ile aynı normalize edilmiş fark formülünü
+    paylaşır ama eşiğin altında kalan hücreleri de (None yerine) "normal" olarak döner."""
+
+    def test_no_data_when_one_side_missing(self):
+        a = make_stat(100.0)
+        level, abs_diff, pct_diff = classify_diff_level(a, None, ShiftAnomalyThresholds())
+        assert level == "no_data"
+        assert abs_diff is None and pct_diff is None
+
+    def test_no_data_when_insufficient_records(self):
+        a = make_stat(100.0, record_count=1)
+        b = make_stat(120.0, record_count=10)
+        level, _, _ = classify_diff_level(a, b, ShiftAnomalyThresholds())
+        assert level == "no_data"
+
+    def test_normal_below_medium_threshold(self):
+        a, b = make_stat(100.0), make_stat(102.0)
+        level, abs_diff, _ = classify_diff_level(a, b, ShiftAnomalyThresholds())
+        assert level == "normal"
+        assert abs_diff == pytest.approx(2.0)
+
+    def test_attention_between_medium_and_high(self):
+        a, b = make_stat(100.0), make_stat(110.0)
+        level, _, _ = classify_diff_level(a, b, ShiftAnomalyThresholds())
+        assert level == "attention"
+
+    def test_significant_between_high_and_critical(self):
+        a, b = make_stat(100.0), make_stat(118.0)
+        level, _, _ = classify_diff_level(a, b, ShiftAnomalyThresholds())
+        assert level == "significant"
+
+    def test_critical_above_critical_threshold(self):
+        a, b = make_stat(80.0), make_stat(130.0)
+        level, _, _ = classify_diff_level(a, b, ShiftAnomalyThresholds())
+        assert level == "critical"
+
+    def test_tiny_absolute_gap_near_zero_scale_is_normal_even_if_pct_high(self):
+        # `_compare_pair`'daki aynı davranış (bkz. yukarıdaki eşdeğer test) — heatmap'te kart
+        # listesinden farklı olarak None değil "normal" döner, hücre matriste hâlâ görünür.
+        a, b = make_stat(0.04), make_stat(0.43)
+        level, _, _ = classify_diff_level(a, b, ShiftAnomalyThresholds())
+        assert level == "normal"
+
+    def test_both_zero_is_normal(self):
+        a, b = make_stat(0.0), make_stat(0.0)
+        level, abs_diff, pct_diff = classify_diff_level(a, b, ShiftAnomalyThresholds())
+        assert level == "normal"
+        assert abs_diff == 0.0 and pct_diff == 0.0
+
+
+class TestShiftDiffClassification:
+    def test_matches_classify_diff_level_magnitude(self):
+        t = ShiftAnomalyThresholds()
+        assert _shift_diff_classification(100.0, 110.0, t) == "attention"
+        assert _shift_diff_classification(100.0, 118.0, t) == "significant"
+        assert _shift_diff_classification(80.0, 130.0, t) == "critical"
+        assert _shift_diff_classification(100.0, 100.5, t) == "normal"
+
+
+class TestBuildMatrixInsight:
+    def test_single_shift_returns_generic_message(self):
+        v1 = make_shift("1. Vardiya")
+        row = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen A", employee_number="SCL-V1-001",
+            cells={v1.id: ForemanShiftCell(avg_actual=100.0, avg_target=100.0, capped_score=100.0, record_count=10)},
+        )
+        result = _build_matrix_insight([v1], [row], ShiftAnomalyThresholds())
+        assert "yetecek veri" in result
+
+    def test_both_foremen_show_shift_effect(self):
+        v1, v2 = make_shift("1. Vardiya"), make_shift("2. Vardiya")
+        row_a = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen A", employee_number="A",
+            cells={
+                v1.id: ForemanShiftCell(110.0, 100.0, 110.0, 10),
+                v2.id: ForemanShiftCell(90.0, 100.0, 90.0, 10),
+            },
+        )
+        row_b = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen B", employee_number="B",
+            cells={
+                v1.id: ForemanShiftCell(108.0, 100.0, 108.0, 10),
+                v2.id: ForemanShiftCell(88.0, 100.0, 88.0, 10),
+            },
+        )
+        result = _build_matrix_insight([v1, v2], [row_a, row_b], ShiftAnomalyThresholds())
+        assert "vardiya etkisiyle" in result
+
+    def test_only_one_foreman_shows_shift_effect(self):
+        v1, v2 = make_shift("1. Vardiya"), make_shift("2. Vardiya")
+        row_a = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen A", employee_number="A",
+            cells={
+                v1.id: ForemanShiftCell(110.0, 100.0, 110.0, 10),
+                v2.id: ForemanShiftCell(90.0, 100.0, 90.0, 10),
+            },
+        )
+        row_b = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen B", employee_number="B",
+            cells={
+                v1.id: ForemanShiftCell(101.0, 100.0, 101.0, 10),
+                v2.id: ForemanShiftCell(100.0, 100.0, 100.0, 10),
+            },
+        )
+        result = _build_matrix_insight([v1, v2], [row_a, row_b], ShiftAnomalyThresholds())
+        assert "Formen A" in result
+        assert "vardiyadan çok Formen A" in result
+
+    def test_cross_foreman_same_shift_effect(self):
+        # Formenler kendi içlerinde vardiyalar arasında istikrarlı ama AYNI vardiyada birbirinden
+        # belirgin şekilde ayrışıyorlar — sorun formen performansıyla ilişkili, cümlede vardiya
+        # adı ("1. Vardiya") tekrar etmeden ("... vardiyasında vardiyasında" gibi) doğal okunmalı.
+        v1, v2 = make_shift("1. Vardiya"), make_shift("2. Vardiya")
+        row_a = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen A", employee_number="A",
+            cells={
+                v1.id: ForemanShiftCell(100.0, 100.0, 100.0, 10),
+                v2.id: ForemanShiftCell(100.0, 100.0, 100.0, 10),
+            },
+        )
+        row_b = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen B", employee_number="B",
+            cells={
+                v1.id: ForemanShiftCell(130.0, 100.0, 130.0, 10),
+                v2.id: ForemanShiftCell(131.0, 100.0, 131.0, 10),
+            },
+        )
+        result = _build_matrix_insight([v1, v2], [row_a, row_b], ShiftAnomalyThresholds())
+        assert "1. Vardiya içinde Formen A ile Formen B arasında" in result
+        assert "vardiyasında vardiyasında" not in result
+        assert "vardiyadan çok formen performansıyla" in result
+
+    def test_stable_foremen_returns_neutral_message(self):
+        v1, v2 = make_shift("1. Vardiya"), make_shift("2. Vardiya")
+        row_a = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen A", employee_number="A",
+            cells={
+                v1.id: ForemanShiftCell(100.0, 100.0, 100.0, 10),
+                v2.id: ForemanShiftCell(101.0, 100.0, 101.0, 10),
+            },
+        )
+        row_b = ForemanShiftRow(
+            foreman_id=uuid4(), name="Formen B", employee_number="B",
+            cells={
+                v1.id: ForemanShiftCell(99.0, 100.0, 99.0, 10),
+                v2.id: ForemanShiftCell(100.0, 100.0, 100.0, 10),
+            },
+        )
+        result = _build_matrix_insight([v1, v2], [row_a, row_b], ShiftAnomalyThresholds())
+        assert "istikrarlı" in result

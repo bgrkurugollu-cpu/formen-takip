@@ -55,6 +55,8 @@ def _apply_filters(stmt: Select, filters: Filters) -> Select:
         stmt = stmt.where(PerformanceRecord.shift_id.in_(filters.shift_ids))
     if filters.kpi_ids:
         stmt = stmt.where(PerformanceRecord.kpi_id.in_(filters.kpi_ids))
+    if filters.foreman_ids:
+        stmt = stmt.where(PerformanceRecord.foreman_id.in_(filters.foreman_ids))
     return stmt
 
 

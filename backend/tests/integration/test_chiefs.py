@@ -86,6 +86,12 @@ class TestChiefDetail:
         assert 1 <= body["factory_rank"] <= body["factory_total"]
         assert body["factory_total"] <= body["company_total"]
 
+    def test_detail_exposes_contact_info(self, client, auth_headers, db_session):
+        chief = db_session.scalars(select(Chief).order_by(Chief.employee_number)).first()
+        body = client.get(f"/api/v1/chiefs/{chief.id}", params=PERIOD, headers=auth_headers).json()
+        assert body["phone_number"].startswith("+90")
+        assert "@" in body["email"]
+
     def test_team_members_all_belong_to_the_chief(self, client, auth_headers, db_session):
         chief = db_session.scalars(select(Chief).order_by(Chief.employee_number)).first()
         team = client.get(f"/api/v1/chiefs/{chief.id}/foremen", params=PERIOD, headers=auth_headers).json()

@@ -14,6 +14,7 @@ class Filters:
     chief_ids: list[UUID] | None = None
     shift_ids: list[UUID] | None = None
     kpi_ids: list[UUID] | None = None
+    foreman_ids: list[UUID] | None = None
 
 
 def parse_uuid_list(value: str | None) -> list[UUID] | None:
@@ -30,6 +31,7 @@ def common_filters(
     chief_ids: str | None = Query(None, description="Virgülle ayrılmış şef ID listesi"),
     shift_ids: str | None = Query(None, description="Virgülle ayrılmış vardiya ID listesi"),
     kpi_ids: str | None = Query(None, description="Virgülle ayrılmış KPI ID listesi"),
+    foreman_ids: str | None = Query(None, description="Virgülle ayrılmış formen ID listesi"),
 ) -> Filters:
     resolved_to = date_to or date.today()
     resolved_from = date_from or (resolved_to - timedelta(days=30))
@@ -43,6 +45,7 @@ def common_filters(
         chief_ids=parse_uuid_list(chief_ids),
         shift_ids=parse_uuid_list(shift_ids),
         kpi_ids=parse_uuid_list(kpi_ids),
+        foreman_ids=parse_uuid_list(foreman_ids),
     )
 
 

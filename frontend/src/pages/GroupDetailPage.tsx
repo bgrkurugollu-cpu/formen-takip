@@ -59,6 +59,24 @@ export function GroupDetailPage() {
         <Card title="Fabrika İçi Sıralaması"><p className="text-xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{c.factory_rank ?? "-"} / {c.factory_total}</p></Card>
         <Card title="Göreve Başlama"><p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{c.hire_date}</p></Card>
         <Card title="Durum"><p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{c.is_active ? "Aktif" : "Pasif"}</p></Card>
+        <Card title="Telefon">
+          {c.phone_number ? (
+            <a href={`tel:${c.phone_number}`} className="text-sm font-medium hover:underline" style={{ color: "var(--text-primary)" }}>
+              {c.phone_number}
+            </a>
+          ) : (
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>—</p>
+          )}
+        </Card>
+        <Card title="E-posta">
+          {c.email ? (
+            <a href={`mailto:${c.email}`} className="truncate text-sm font-medium hover:underline" style={{ color: "var(--text-primary)" }}>
+              {c.email}
+            </a>
+          ) : (
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>—</p>
+          )}
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

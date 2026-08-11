@@ -26,15 +26,20 @@ import type {
   KpiAnalysis,
   KpiListItem,
   KpiSummaryItem,
+  MonthlyReportDetail,
+  MonthlyReportLatest,
+  MonthlyReportSummary,
   PagedResponse,
   PlantListItem,
   PlantRankingItem,
   ReportExportMeta,
   ReportFormat,
   ReportType,
+  ForemanShiftMatrixResponse,
   ShiftAnalysisCardsResponse,
   ShiftAnomalyDetail,
   ShiftComparisonItem,
+  ShiftHeatmapResponse,
   TrendPoint,
 } from "./types";
 
@@ -94,6 +99,14 @@ export function useForemanRanking(params: Params, order: "asc" | "desc", limit: 
     queryKey: ["dashboard", "foreman-ranking", params, order, limit],
     queryFn: async () =>
       (await apiClient.get<{ items: import("./types").ForemanRankingItem[] }>("/dashboard/foreman-ranking", { params: { ...params, order, limit } })).data,
+  });
+}
+
+export function useForemanTrendRanking(params: Params, direction: "improving" | "declining", limit: number) {
+  return useQuery({
+    queryKey: ["dashboard", "foreman-trend-ranking", params, direction, limit],
+    queryFn: async () =>
+      (await apiClient.get<{ items: import("./types").ForemanTrendRankingItem[] }>("/dashboard/foreman-trend-ranking", { params: { ...params, direction, limit } })).data,
   });
 }
 
@@ -166,6 +179,15 @@ export function useForemen(params: Params) {
   });
 }
 
+export function useForemenByIds(ids: string[]) {
+  return useQuery({
+    enabled: ids.length > 0,
+    queryKey: ["foremen", "by-ids", ids],
+    queryFn: async () =>
+      (await apiClient.get<PagedResponse<ForemanListItem>>("/foremen", { params: { ids: ids.join(","), page_size: Math.max(ids.length, 1) } })).data,
+  });
+}
+
 export function useForemanDetail(foremanId: string | undefined, params: Params) {
   return useQuery({
     enabled: !!foremanId,
@@ -213,6 +235,33 @@ export function useForemanContributionSummary(foremanId: string | undefined) {
     queryKey: ["foremen", foremanId, "contribution-summary"],
     queryFn: async () =>
       (await apiClient.get<ForemanContributionSummary>(`/foremen/${foremanId}/contribution-summary`)).data,
+  });
+}
+
+export function useForemanMonthlyReports(foremanId: string | undefined) {
+  return useQuery({
+    enabled: !!foremanId,
+    queryKey: ["foremen", foremanId, "monthly-reports"],
+    queryFn: async () =>
+      (await apiClient.get<{ items: MonthlyReportSummary[] }>(`/foremen/${foremanId}/monthly-reports`)).data,
+  });
+}
+
+export function useForemanMonthlyReportLatest(foremanId: string | undefined) {
+  return useQuery({
+    enabled: !!foremanId,
+    queryKey: ["foremen", foremanId, "monthly-reports", "latest"],
+    queryFn: async () =>
+      (await apiClient.get<MonthlyReportLatest>(`/foremen/${foremanId}/monthly-reports/latest`)).data,
+  });
+}
+
+export function useForemanMonthlyReport(foremanId: string | undefined, year: number | undefined, month: number | undefined) {
+  return useQuery({
+    enabled: !!foremanId && !!year && !!month,
+    queryKey: ["foremen", foremanId, "monthly-reports", year, month],
+    queryFn: async () =>
+      (await apiClient.get<MonthlyReportDetail>(`/foremen/${foremanId}/monthly-reports/${year}/${month}`)).data,
   });
 }
 
@@ -455,5 +504,25 @@ export function useShiftAnalysisDetail(params: { plant_id?: string; shift_id?: s
     queryKey: ["shift-analysis", "detail", params],
     queryFn: async () => (await apiClient.get<ShiftAnomalyDetail>("/shift-analysis/detail", { params })).data,
     enabled: !!(params.plant_id && params.shift_id && params.kpi_id),
+  });
+}
+
+export function useShiftHeatmap(params: Params) {
+  return useQuery({
+    queryKey: ["shift-analysis", "heatmap", params],
+    queryFn: async () => (await apiClient.get<ShiftHeatmapResponse>("/shift-analysis/heatmap", { params })).data,
+  });
+}
+
+export function usePlantForemanShiftMatrix(plantId: string | undefined, kpiId: string | undefined, params: Params) {
+  return useQuery({
+    enabled: !!plantId && !!kpiId,
+    queryKey: ["plants", plantId, "foreman-shift-matrix", kpiId, params],
+    queryFn: async () =>
+      (
+        await apiClient.get<ForemanShiftMatrixResponse>(`/plants/${plantId}/foreman-shift-matrix`, {
+          params: { ...params, kpi_id: kpiId },
+        })
+      ).data,
   });
 }

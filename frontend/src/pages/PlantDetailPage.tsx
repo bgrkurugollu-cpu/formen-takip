@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { FilterBar } from "../components/FilterBar";
 import { Card, EmptyState, ErrorState, LoadingState } from "../components/StateViews";
 import { PerformanceLevelBadge } from "../components/PerformanceLevelBadge";
+import { ForemanShiftComparisonMatrix } from "../components/ForemanShiftComparisonMatrix";
 import { KpiBarChart } from "../components/charts/KpiBarChart";
 import { RankingBarChart } from "../components/charts/RankingBarChart";
 import {
@@ -55,20 +56,7 @@ export function PlantDetailPage() {
 
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
-      {summary.data && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Card title="Aktif Formen"><p className="text-xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{summary.data.active_foreman_count}</p></Card>
-          <Card title="Kritik Formen"><p className="text-xl font-semibold tabular-nums text-red-600">{summary.data.critical_foreman_count}</p></Card>
-          <Card title="En Güçlü KPI">
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{summary.data.strongest_kpi?.name ?? "-"}</p>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{summary.data.strongest_kpi?.avg_score.toFixed(1)} puan</p>
-          </Card>
-          <Card title="En Düşük KPI">
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{summary.data.weakest_kpi?.name ?? "-"}</p>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{summary.data.weakest_kpi?.avg_score.toFixed(1)} puan</p>
-          </Card>
-        </div>
-      )}
+      <ForemanShiftComparisonMatrix plantId={plantId!} dateParams={asQueryParams} />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title="KPI Bazlı Performans">

@@ -11,10 +11,6 @@ from app.models.enums import AnalysisMode, AnomalyAnalysisStatus, AnomalySeverit
 
 class Anomaly(TimestampMixin, Base):
     """Sentetik üretici tarafından oluşturulan ML tespiti kaydı.
-
-    Şema, gelecekte gerçek bir ML tespit servisinin üreteceği çıktıyla aynı alanlara
-    sahip olacak şekilde tasarlanmıştır (bkz. app/services/synthetic/anomaly_generator.py) —
-    ileride sentetik üretici, aynı şemaya yazan gerçek bir servisle değiştirilebilir.
     """
 
     __tablename__ = "anomalies"
@@ -52,8 +48,6 @@ class Anomaly(TimestampMixin, Base):
     affected_days: Mapped[int | None] = mapped_column(nullable=True)
     total_days: Mapped[int | None] = mapped_column(nullable=True)
 
-    # Genişletilebilir/serbest biçimli destekleyici veriler — gelecekteki gerçek ML/Ocean
-    # entegrasyonunda da aynı JSON şekli üretilecek şekilde tutulur.
     comparison: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     related_signals: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -64,11 +58,6 @@ class Anomaly(TimestampMixin, Base):
 
 
 class AnomalyAnalysis(TimestampMixin, Base):
-    """Bir tespit için üretilen (gerçek veya demo) yapay zekâ analizi çalıştırması.
-
-    Bir tespit birden çok kez analiz edilebilir; geçmiş kayıtlar silinmez, yalnızca
-    en güncel olan arayüzde varsayılan gösterilir (bkz. app/api/v1/anomalies.py).
-    """
 
     __tablename__ = "anomaly_analyses"
 
@@ -100,9 +89,6 @@ class AnomalyAnalysis(TimestampMixin, Base):
 
 
 class AnomalyToolCall(TimestampMixin, Base):
-    """`AnomalyAnalysis` sırasında yapılan tek bir salt-okunur araç çağrısının kaydı.
-    Prototip aşamasında hata ayıklama amacıyla aracın tam sonucu saklanır; gizli bilgi
-    içermez (yalnızca sentetik operasyonel veri)."""
 
     __tablename__ = "anomaly_tool_calls"
 

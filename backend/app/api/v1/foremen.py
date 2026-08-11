@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -11,12 +11,15 @@ from app.db.session import get_db
 from app.models.contribution import ContributionWork, ContributionWorkForeman
 from app.models.enums import ContributionRole, ContributionStatus, ContributionWorkType
 from app.models.foreman import Chief, Foreman, ForemanAssignment
+from app.models.foreman_report import ForemanMonthlyReport
 from app.models.kpi import Kpi, KpiCalculationRule
 from app.models.organization import Plant, Shift
-from app.schemas.common import Filters, PageParams, common_filters, page_params
+from app.schemas.common import Filters, PageParams, common_filters, page_params, parse_uuid_list
 from app.services import analytics
 from app.services.kpi_engine import resolve_performance_level
 from app.services.level_lookup import get_performance_levels, level_to_dict
+from app.services.monthly_foreman_report import get_or_generate_monthly_report, latest_completed_period
+from app.services.monthly_foreman_report_pdf import render_monthly_foreman_report_pdf
 
 router = APIRouter(prefix="/foremen", tags=["foremen"])
 
@@ -54,6 +57,7 @@ def _assignments_to_dict(
 @router.get("")
 def list_foremen(
     search: str | None = Query(None),
+    ids: str | None = Query(None, description="Virgülle ayrılmış formen ID listesi (isim çözümleme için)"),
     plant_id: UUID | None = Query(None),
     chief_id: UUID | None = Query(None),
     shift_id: UUID | None = Query(None),
@@ -75,6 +79,8 @@ def list_foremen(
             | Foreman.last_name.ilike(f"%{search}%")
             | Foreman.employee_number.ilike(f"%{search}%")
         )
+    if ids:
+        query = query.where(Foreman.id.in_(parse_uuid_list(ids) or []))
     if is_active is not None:
         query = query.where(Foreman.is_active == is_active)
 
@@ -219,6 +225,7 @@ def get_foreman(
         "id": str(foreman.id), "employee_number": foreman.employee_number,
         "full_name": f"{foreman.first_name} {foreman.last_name}",
         "hire_date": foreman.hire_date.isoformat(), "is_active": foreman.is_active,
+        "phone_number": foreman.phone_number, "email": foreman.email,
         "assignments": assignment_items,
         "total_score": round(total_score, 2),
         "is_reliable": my_score.is_reliable if my_score else False,
@@ -465,3 +472,78 @@ def foreman_contribution_summary(
         "total_time_saving_minutes": round(total_time_saving, 2),
         "last_contribution_date": last_date.isoformat() if last_date else None,
     }
+
+
+def _monthly_report_summary(report: ForemanMonthlyReport) -> dict:
+    return {
+        "year": report.year,
+        "month": report.month,
+        "generated_at": report.generated_at.isoformat(),
+        "overall_score": float(report.overall_score) if report.overall_score is not None else None,
+        "overall_level_name": report.overall_level_name,
+        "is_reliable": report.is_reliable,
+    }
+
+
+@router.get("/{foreman_id}/monthly-reports")
+def foreman_monthly_reports(foreman_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    reports = list(
+        db.scalars(
+            select(ForemanMonthlyReport)
+            .where(ForemanMonthlyReport.foreman_id == foreman_id)
+            .order_by(ForemanMonthlyReport.year.desc(), ForemanMonthlyReport.month.desc())
+        )
+    )
+    return {"items": [_monthly_report_summary(r) for r in reports]}
+
+
+@router.get("/{foreman_id}/monthly-reports/latest")
+def foreman_monthly_report_latest(foreman_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    latest = db.scalar(
+        select(ForemanMonthlyReport)
+        .where(ForemanMonthlyReport.foreman_id == foreman_id)
+        .order_by(ForemanMonthlyReport.year.desc(), ForemanMonthlyReport.month.desc())
+        .limit(1)
+    )
+    if latest is None:
+        year, month = latest_completed_period()
+        try:
+            latest = get_or_generate_monthly_report(db, foreman_id, year, month)
+        except ValueError:
+            return {"available": False}
+    return {"available": True, **_monthly_report_summary(latest), "report_data": latest.report_data}
+
+
+@router.get("/{foreman_id}/monthly-reports/{year}/{month}")
+def foreman_monthly_report_detail(
+    foreman_id: UUID, year: int, month: int, db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> dict:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    try:
+        report = get_or_generate_monthly_report(db, foreman_id, year, month)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {**_monthly_report_summary(report), "report_data": report.report_data}
+
+
+@router.get("/{foreman_id}/monthly-reports/{year}/{month}/pdf")
+def foreman_monthly_report_pdf(
+    foreman_id: UUID, year: int, month: int, db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> Response:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    try:
+        report = get_or_generate_monthly_report(db, foreman_id, year, month)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    pdf_bytes = render_monthly_foreman_report_pdf(report.report_data)
+    file_name = f"formen-performans-raporu-{report.report_data['foreman']['employee_number']}-{year}-{month:02d}.pdf"
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )

@@ -115,6 +115,17 @@ export interface ForemanRankingItem {
   level: PerformanceLevel;
 }
 
+export interface ForemanTrendRankingItem {
+  foreman_id: string;
+  employee_number: string;
+  full_name: string;
+  total_score: number;
+  previous_score: number;
+  delta: number;
+  is_reliable: boolean;
+  level: PerformanceLevel;
+}
+
 export interface DistributionItem extends PerformanceLevel {
   count: number;
 }
@@ -181,6 +192,8 @@ export interface ForemanDetail {
   full_name: string;
   hire_date: string;
   is_active: boolean;
+  phone_number: string | null;
+  email: string | null;
   assignments: ForemanAssignmentItem[];
   total_score: number;
   is_reliable: boolean;
@@ -210,6 +223,8 @@ export interface ChiefDetail {
   full_name: string;
   hire_date: string;
   is_active: boolean;
+  phone_number: string | null;
+  email: string | null;
   plants: { id: string; name: string }[];
   factory: { id: string; code: string; name: string } | null;
   foreman_count: number;
@@ -303,6 +318,93 @@ export interface AssignmentHistoryItem {
   start_date: string;
   end_date: string | null;
   is_active: boolean;
+}
+
+export interface MonthlyReportComparison {
+  value: number;
+  diff: number;
+  diff_pct: number | null;
+  status: "above" | "at" | "below";
+  is_favorable: boolean;
+}
+
+export interface MonthlyReportKpiEntry {
+  kpi_id: string;
+  code: string;
+  name: string;
+  unit: string;
+  weight: number;
+  success_direction_higher: boolean;
+  has_data: boolean;
+  record_count: number;
+  actual: number | null;
+  score: number | null;
+  level: PerformanceLevel | null;
+  vs_personal_target: MonthlyReportComparison | null;
+  vs_factory_average: MonthlyReportComparison | null;
+}
+
+export interface MonthlyReportNote {
+  kpi_code: string;
+  name: string;
+  text: string;
+  manager_prompt?: string;
+}
+
+export interface MonthlyReportPreviousMonthKpi {
+  code: string;
+  name: string;
+  diff: number;
+  is_improvement: boolean;
+}
+
+export interface MonthlyReportData {
+  foreman: { id: string; employee_number: string; full_name: string; hire_date: string };
+  period: { year: number; month: number; label: string; date_from: string; date_to: string };
+  generated_at: string;
+  org: { factory_name: string | null; plants: { id: string; name: string }[]; chief_name: string | null } | null;
+  insufficient_data: boolean;
+  insufficient_data_reason?: string;
+  overall: {
+    score: number;
+    level: PerformanceLevel;
+    kpi_count: { total: number; above_or_at_target: number; below_target: number; critical: number };
+  } | null;
+  summary_text?: string;
+  closing_text?: string;
+  kpis?: MonthlyReportKpiEntry[];
+  strengths?: MonthlyReportNote[];
+  improvements?: MonthlyReportNote[];
+  critical_attention?: MonthlyReportNote[];
+  congratulations?: { shown: boolean; text: string | null; kpi_codes: string[] };
+  trend?: {
+    weekly_points: { bucket: string; total_score: number; is_reliable: boolean }[];
+    shape: "iyileşme" | "kötüleşme" | "stabil" | "dalgalı" | null;
+    text: string | null;
+  };
+  previous_month?: {
+    available: boolean;
+    label?: string;
+    overall_diff?: number;
+    per_kpi?: MonthlyReportPreviousMonthKpi[];
+  };
+}
+
+export interface MonthlyReportSummary {
+  year: number;
+  month: number;
+  generated_at: string;
+  overall_score: number | null;
+  overall_level_name: string | null;
+  is_reliable: boolean;
+}
+
+export interface MonthlyReportDetail extends MonthlyReportSummary {
+  report_data: MonthlyReportData;
+}
+
+export interface MonthlyReportLatest extends Partial<MonthlyReportDetail> {
+  available: boolean;
 }
 
 export interface KpiListItem {
@@ -840,4 +942,80 @@ export interface ShiftAnomalyDetail extends ShiftAnomalyCard {
   cross_kpi_signals: ShiftAnomalyCrossKpiSignal[];
   pattern_commentary: string;
   is_recurring_pattern: boolean;
+}
+
+// --- Vardiya Anomali Heatmap ---
+
+export type HeatmapLevel = "no_data" | "normal" | "attention" | "significant" | "critical";
+
+export interface HeatmapShiftPoint {
+  avg_actual: number;
+  record_count: number;
+}
+
+export interface HeatmapCell {
+  plant_id: string;
+  kpi_id: string;
+  level: HeatmapLevel;
+  v1: HeatmapShiftPoint | null;
+  v2: HeatmapShiftPoint | null;
+  abs_diff: number | null;
+  pct_diff: number | null;
+  better_shift_id: string | null;
+}
+
+export interface HeatmapPlantRef {
+  id: string;
+  name: string;
+  sequence_number: number;
+  factory_code: string;
+}
+
+export interface HeatmapKpiRef {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+}
+
+export interface ShiftHeatmapSummary {
+  anomaly_plant_count: number;
+  critical_cell_count: number;
+  priority_plant_count: number;
+  top_kpi: { id: string; name: string; count: number } | null;
+}
+
+export interface ShiftHeatmapResponse {
+  period: ShiftAnalysisPeriod;
+  shifts: { id: string; code: string; name: string }[];
+  plants: HeatmapPlantRef[];
+  kpis: HeatmapKpiRef[];
+  cells: HeatmapCell[];
+  summary: ShiftHeatmapSummary;
+}
+
+// --- Formen-Vardiya Karşılaştırma Matrisi ---
+
+export interface ForemanShiftMatrixCell {
+  avg_actual: number;
+  avg_target: number;
+  score: number;
+  record_count: number;
+  deviation_pct: number | null;
+  level: PerformanceLevel;
+}
+
+export interface ForemanShiftMatrixRow {
+  foreman_id: string;
+  full_name: string;
+  employee_number: string;
+  cells: Record<string, ForemanShiftMatrixCell | null>;
+}
+
+export interface ForemanShiftMatrixResponse {
+  kpi: { id: string; code: string; name: string; unit: string; success_direction_higher: boolean };
+  reference_target: number;
+  shifts: { id: string; code: string; name: string }[];
+  rows: ForemanShiftMatrixRow[];
+  insight: string;
 }

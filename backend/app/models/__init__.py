@@ -28,6 +28,7 @@ from app.models.enums import (
     VerifyingDepartment,
 )
 from app.models.foreman import Chief, Foreman, ForemanAssignment
+from app.models.foreman_report import ForemanMonthlyReport
 from app.models.integration import DataQualityIssue, IntegrationRun
 from app.models.kpi import Kpi, KpiCalculationRule, KpiTarget, PerformanceLevelRule
 from app.models.organization import Factory, Plant, Shift
@@ -55,6 +56,7 @@ __all__ = [
     "Chief",
     "Foreman",
     "ForemanAssignment",
+    "ForemanMonthlyReport",
     "DataQualityIssue",
     "IntegrationRun",
     "Kpi",

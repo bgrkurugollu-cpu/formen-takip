@@ -1,5 +1,5 @@
-import { ArrowRight, Trophy, TrendingDown } from "lucide-react";
-import type { ForemanRankingItem } from "../api/types";
+import { ArrowRight, Trophy, TrendingDown, TrendingUp } from "lucide-react";
+import type { ForemanRankingItem, ForemanTrendRankingItem } from "../api/types";
 import type { FilterState } from "../hooks/useFilters";
 import { LoadingState, EmptyState } from "./StateViews";
 
@@ -34,6 +34,7 @@ export function ForemanScoreRow({
   color,
   showRankTint,
   onNavigate,
+  delta,
 }: {
   id: string;
   name: string;
@@ -42,9 +43,11 @@ export function ForemanScoreRow({
   color: string;
   showRankTint: boolean;
   onNavigate: (id: string) => void;
+  delta?: number;
 }) {
   const barPct = Math.max(4, Math.min(100, score));
   const tint = showRankTint ? RANK_TINTS[rank - 1] : null;
+  const deltaColor = delta !== undefined ? (delta >= 0 ? "#16a34a" : "#dc2626") : null;
 
   return (
     <button
@@ -81,6 +84,14 @@ export function ForemanScoreRow({
       >
         {score.toFixed(1)}
       </span>
+      {deltaColor && (
+        <span
+          className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
+          style={{ background: `${deltaColor}1a`, color: deltaColor, border: `1px solid ${deltaColor}40` }}
+        >
+          {delta! >= 0 ? "+" : ""}{delta!.toFixed(1)}
+        </span>
+      )}
     </button>
   );
 }
@@ -93,14 +104,16 @@ function RankingSection({
   isLoading,
   highlightRanks,
   onNavigate,
+  showDelta,
 }: {
   title: string;
   accent: string;
   icon: typeof Trophy;
-  items: ForemanRankingItem[] | undefined;
+  items: (ForemanRankingItem | ForemanTrendRankingItem)[] | undefined;
   isLoading: boolean;
   highlightRanks: boolean;
   onNavigate: (id: string) => void;
+  showDelta?: boolean;
 }) {
   return (
     <div className="rounded-lg p-2.5" style={{ background: `${accent}0d`, border: `1px solid ${accent}26` }}>
@@ -123,6 +136,7 @@ function RankingSection({
             color={item.level.color}
             showRankTint={highlightRanks}
             onNavigate={onNavigate}
+            delta={showDelta && "delta" in item ? item.delta : undefined}
           />
         ))}
       </div>
@@ -136,6 +150,10 @@ export function ForemanRankingCard({
   topLoading,
   bottomItems,
   bottomLoading,
+  improvingItems,
+  improvingLoading,
+  decliningItems,
+  decliningLoading,
   onNavigateForeman,
   onViewAll,
 }: {
@@ -144,6 +162,10 @@ export function ForemanRankingCard({
   topLoading: boolean;
   bottomItems: ForemanRankingItem[] | undefined;
   bottomLoading: boolean;
+  improvingItems?: ForemanTrendRankingItem[];
+  improvingLoading?: boolean;
+  decliningItems?: ForemanTrendRankingItem[];
+  decliningLoading?: boolean;
   onNavigateForeman: (id: string) => void;
   onViewAll: () => void;
 }) {
@@ -166,7 +188,7 @@ export function ForemanRankingCard({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <RankingSection
           title="En Yüksek Performans"
           accent="#16a34a"
@@ -184,6 +206,26 @@ export function ForemanRankingCard({
           isLoading={bottomLoading}
           highlightRanks={false}
           onNavigate={onNavigateForeman}
+        />
+        <RankingSection
+          title="Gelişim Gösteren Formenler"
+          accent="#0d9488"
+          icon={TrendingUp}
+          items={improvingItems}
+          isLoading={!!improvingLoading}
+          highlightRanks={false}
+          onNavigate={onNavigateForeman}
+          showDelta
+        />
+        <RankingSection
+          title="En Fazla Performans Kaybı"
+          accent="#b91c1c"
+          icon={TrendingDown}
+          items={decliningItems}
+          isLoading={!!decliningLoading}
+          highlightRanks={false}
+          onNavigate={onNavigateForeman}
+          showDelta
         />
       </div>
 

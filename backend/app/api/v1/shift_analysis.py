@@ -2,6 +2,7 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -103,6 +104,70 @@ def get_cards(filters: dict = Depends(_cards_filters), db: Session = Depends(get
     )
     summary = shift_analysis.build_summary(cards, month_start, month_end)
     return {"items": [_card_to_dict(c) for c in cards], "summary": _summary_to_dict(summary)}
+
+
+def _heatmap_filters(
+    factory_ids: str | None = Query(None, description="Virgülle ayrılmış fabrika ID listesi"),
+    plant_ids: str | None = Query(None, description="Virgülle ayrılmış tesis ID listesi"),
+    kpi_ids: str | None = Query(None, description="Virgülle ayrılmış KPI ID listesi"),
+    month: str | None = Query(None, description="YYYY-MM — belirtilmezse bir önce tamamlanan ay kullanılır"),
+) -> dict:
+    return {
+        "factory_ids": parse_uuid_list(factory_ids),
+        "plant_ids": parse_uuid_list(plant_ids),
+        "kpi_ids": parse_uuid_list(kpi_ids),
+        "month": month,
+    }
+
+
+def _shift_stat_to_dict(stat: shift_analysis.ForemanCellStat | None) -> dict | None:
+    if stat is None:
+        return None
+    return {"avg_actual": round(stat.avg_actual, 2), "record_count": stat.record_count}
+
+
+def _heatmap_cell_to_dict(cell: shift_analysis.HeatmapCell) -> dict:
+    return {
+        "plant_id": str(cell.plant_id), "kpi_id": str(cell.kpi_id), "level": cell.level,
+        "v1": _shift_stat_to_dict(cell.v1), "v2": _shift_stat_to_dict(cell.v2),
+        "abs_diff": round(cell.abs_diff, 2) if cell.abs_diff is not None else None,
+        "pct_diff": round(cell.pct_diff, 1) if cell.pct_diff is not None else None,
+        "better_shift_id": str(cell.better_shift_id) if cell.better_shift_id else None,
+    }
+
+
+@router.get("/heatmap")
+def get_heatmap(filters: dict = Depends(_heatmap_filters), db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
+    month_start, month_end = _resolve_period(filters["month"])
+    shifts_by_id = {s.id: s for s in db.scalars(select(shift_analysis.Shift))}
+    plant_refs, kpi_refs, cells = shift_analysis.build_heatmap(
+        db, month_start, month_end,
+        plant_ids=filters["plant_ids"], factory_ids=filters["factory_ids"], kpi_ids=filters["kpi_ids"],
+    )
+    summary = shift_analysis.build_heatmap_summary(cells, kpi_refs, month_start, month_end)
+
+    return {
+        "period": {"month_start": month_start.isoformat(), "month_end": month_end.isoformat(), "label": shift_analysis.month_label(month_end)},
+        "shifts": [
+            {"id": str(s.id), "code": s.code, "name": s.name}
+            for s in sorted(shifts_by_id.values(), key=lambda s: s.sequence)
+        ],
+        "plants": [
+            {"id": str(p.id), "name": p.name, "sequence_number": p.sequence_number, "factory_code": p.factory_code}
+            for p in plant_refs
+        ],
+        "kpis": [{"id": str(k.id), "code": k.code, "name": k.name, "unit": k.unit} for k in kpi_refs],
+        "cells": [_heatmap_cell_to_dict(c) for c in cells],
+        "summary": {
+            "anomaly_plant_count": summary.anomaly_plant_count,
+            "critical_cell_count": summary.critical_cell_count,
+            "priority_plant_count": summary.priority_plant_count,
+            "top_kpi": (
+                {"id": str(summary.top_kpi[0]), "name": summary.top_kpi[1], "count": summary.top_kpi[2]}
+                if summary.top_kpi else None
+            ),
+        },
+    }
 
 
 @router.get("/detail")

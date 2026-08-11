@@ -157,6 +157,8 @@ def get_chief(
         "full_name": f"{chief.first_name} {chief.last_name}",
         "hire_date": chief.hire_date.isoformat(),
         "is_active": chief.is_active,
+        "phone_number": chief.phone_number,
+        "email": chief.email,
         "plants": [{"id": str(p.id), "name": p.name} for p in chief_plants],
         "factory": {"id": str(factory.id), "code": factory.code, "name": factory.name} if factory else None,
         "foreman_count": my_team.foreman_count if my_team else 0,

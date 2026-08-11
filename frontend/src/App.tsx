@@ -9,6 +9,7 @@ import { GroupsPage } from "./pages/GroupsPage";
 import { GroupDetailPage } from "./pages/GroupDetailPage";
 import { ForemenPage } from "./pages/ForemenPage";
 import { ForemanDetailPage } from "./pages/ForemanDetailPage";
+import { MonthlyForemanReportPage } from "./pages/MonthlyForemanReportPage";
 import { KpiAnalysisPage } from "./pages/KpiAnalysisPage";
 import { ImprovementWorksPage } from "./pages/ImprovementWorksPage";
 import { ImprovementWorkDetailPage } from "./pages/ImprovementWorkDetailPage";
@@ -42,6 +43,7 @@ function App() {
       <Route path="/groups/:chiefId" element={<ProtectedRoute><GroupDetailPage /></ProtectedRoute>} />
       <Route path="/foremen" element={<ProtectedRoute><ForemenPage /></ProtectedRoute>} />
       <Route path="/foremen/:foremanId" element={<ProtectedRoute><ForemanDetailPage /></ProtectedRoute>} />
+      <Route path="/foremen/:foremanId/reports/:year/:month" element={<ProtectedRoute><MonthlyForemanReportPage /></ProtectedRoute>} />
       <Route path="/kpis" element={<ProtectedRoute><KpiAnalysisPage /></ProtectedRoute>} />
       <Route path="/improvement-works" element={<ProtectedRoute><ImprovementWorksPage /></ProtectedRoute>} />
       <Route path="/improvement-works/:workId" element={<ProtectedRoute><ImprovementWorkDetailPage /></ProtectedRoute>} />

@@ -1,3 +1,5 @@
+from dataclasses import replace
+from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -225,6 +227,62 @@ def foreman_ranking(
                 "level": level_to_dict(resolve_performance_level(s.total_score, levels)),
             }
             for s in scores
+        ]
+    }
+
+
+@router.get("/foreman-trend-ranking")
+def foreman_trend_ranking(
+    direction: str = Query("improving", pattern="^(improving|declining)$"),
+    limit: int = Query(5, ge=1, le=100),
+    filters: Filters = Depends(common_filters),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+) -> dict:
+    """Seçili dönem ile ondan hemen önceki eşit uzunluktaki dönem arasındaki skor
+    değişimine göre formenleri sıralar. Yalnızca her iki dönemde de veri bulunan
+    formenler dahil edilir — aksi halde yeni işe başlayan bir formen anlamsız
+    şekilde en büyük "gelişim" olarak görünür."""
+    levels = get_performance_levels(db)
+
+    period_days = (filters.date_to - filters.date_from).days + 1
+    previous_filters = replace(
+        filters,
+        date_from=filters.date_from - timedelta(days=period_days),
+        date_to=filters.date_from - timedelta(days=1),
+    )
+
+    current_scores = {s.key: s for s in analytics.foreman_scores(db, filters)}
+    previous_scores = {s.key: s for s in analytics.foreman_scores(db, previous_filters)}
+    foremen_by_id = {f.id: f for f in db.scalars(select(Foreman))}
+
+    deltas = [
+        (foreman_id, current, previous_scores[foreman_id])
+        for foreman_id, current in current_scores.items()
+        if foreman_id in previous_scores
+    ]
+    deltas.sort(
+        key=lambda item: item[1].total_score - item[2].total_score,
+        reverse=(direction == "improving"),
+    )
+    deltas = deltas[:limit]
+
+    return {
+        "items": [
+            {
+                "foreman_id": str(foreman_id),
+                "employee_number": foremen_by_id[foreman_id].employee_number if foreman_id in foremen_by_id else None,
+                "full_name": (
+                    f"{foremen_by_id[foreman_id].first_name} {foremen_by_id[foreman_id].last_name}"
+                    if foreman_id in foremen_by_id else None
+                ),
+                "total_score": round(current.total_score, 2),
+                "previous_score": round(previous.total_score, 2),
+                "delta": round(current.total_score - previous.total_score, 2),
+                "is_reliable": current.is_reliable and previous.is_reliable,
+                "level": level_to_dict(resolve_performance_level(current.total_score, levels)),
+            }
+            for foreman_id, current, previous in deltas
         ]
     }
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -39,6 +40,45 @@ LAST_NAMES = [
     "Ocak", "Sağlam", "Solmaz", "Taş", "Ünal", "Vural", "Yaman", "Akın", "Balcı", "Çiftçi",
     "Dinç", "Ergün", "Güler", "Koçak", "Öztaş", "Sezer", "Tanrıverdi", "Uçar", "Sevinç", "Zorlu",
 ]
+
+# Sentetik e-posta adresleri, gerçek bir kurum domain'i çağrıştırmasın diye açıkça sahte olan
+# bu domain altında üretilir (bkz. spec bölüm 3 — İletişim Bilgileri).
+EMAIL_DOMAIN = "example.com"
+_TURKISH_CHAR_MAP = str.maketrans({
+    "ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "I": "i", "İ": "i",
+    "ö": "o", "Ö": "o", "ş": "s", "Ş": "s", "ü": "u", "Ü": "u",
+})
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+# Sentetik cep telefonu üretimi için gerçek operatör bloklarına yakın, tamamen kurgusal
+# 3 haneli GSM önekleri (0 5XX ...) — gerçek bir kişiye ait olduğu izlenimi vermeyecek şekilde
+# rastgele seçilir, sabit/tekil bir numara kullanılmaz.
+_MOBILE_PREFIXES = ["501", "505", "506", "507", "530", "532", "533", "541", "542", "555"]
+
+
+def _normalize_email_local_part(value: str) -> str:
+    ascii_value = value.translate(_TURKISH_CHAR_MAP).lower()
+    return _NON_ALNUM_RE.sub("", ascii_value)
+
+
+def _make_email(first_name: str, last_name: str, used_emails: set[str]) -> str:
+    base = f"{_normalize_email_local_part(first_name)}.{_normalize_email_local_part(last_name)}"
+    candidate = f"{base}@{EMAIL_DOMAIN}"
+    suffix = 2
+    while candidate in used_emails:
+        candidate = f"{base}{suffix}@{EMAIL_DOMAIN}"
+        suffix += 1
+    used_emails.add(candidate)
+    return candidate
+
+
+def _make_phone_number(rng: random.Random, used_phones: set[str]) -> str:
+    while True:
+        prefix = rng.choice(_MOBILE_PREFIXES)
+        subscriber = "".join(str(rng.randint(0, 9)) for _ in range(7))
+        candidate = f"+90{prefix}{subscriber}"
+        if candidate not in used_phones:
+            used_phones.add(candidate)
+            return candidate
 
 # Puan tavansız: hedef tam tutturulduğunda 100, daha iyi performansta 100'ün üzeri, daha kötüde
 # altı — manuel bir üst sınır uygulanmaz (spec rule 2.6/16). Bu sentinel yalnızca kpis.max_score
@@ -249,6 +289,10 @@ def seed_reference_data(
         factories_by_code[spec["code"]] = factory
 
     name_pool = _build_unique_name_pool(rng)
+    used_chief_emails: set[str] = set()
+    used_chief_phones: set[str] = set()
+    used_foreman_emails: set[str] = set()
+    used_foreman_phones: set[str] = set()
 
     # Bir şef artık tek bir tesise değil, aynı fabrika içindeki tesislerden oluşan sabit bir
     # bölgeye ("zone") sorumludur. Bu bölge aynı zamanda o bölgedeki her formenin (her vardiya
@@ -284,6 +328,8 @@ def seed_reference_data(
                 first_name=chief_first, last_name=chief_last,
                 hire_date=chief_hire, is_active=True,
                 sap_personnel_number=f"SAP-S-{zone_idx:03d}",
+                phone_number=_make_phone_number(rng, used_chief_phones),
+                email=_make_email(chief_first, chief_last, used_chief_emails),
             )
             db.add(chief)
             db.flush()
@@ -335,6 +381,8 @@ def seed_reference_data(
                 first_name=foreman_first, last_name=foreman_last,
                 hire_date=hire_date, termination_date=termination_date, is_active=is_active,
                 sap_personnel_number=f"SAP-P-{shift.code}{foreman_idx:03d}",
+                phone_number=_make_phone_number(rng, used_foreman_phones),
+                email=_make_email(foreman_first, foreman_last, used_foreman_emails),
             )
             db.add(foreman)
             db.flush()
@@ -401,10 +449,17 @@ def regenerate_personnel_identities(db: Session, rng: random.Random) -> tuple[in
     foremen = [f for f in db.scalars(select(Foreman)) if f.id in shift_code_by_foreman]
     foremen.sort(key=lambda f: (shift_code_by_foreman[f.id], primary_seq_by_foreman[f.id], f.employee_number))
 
+    used_chief_emails: set[str] = set()
+    used_chief_phones: set[str] = set()
+    used_foreman_emails: set[str] = set()
+    used_foreman_phones: set[str] = set()
+
     for zone_idx, chief in enumerate(chiefs, start=1):
         chief.first_name, chief.last_name = _take_name(name_pool)
         chief.employee_number = f"SEF-{zone_idx:03d}"
         chief.sap_personnel_number = f"SAP-S-{zone_idx:03d}"
+        chief.phone_number = _make_phone_number(rng, used_chief_phones)
+        chief.email = _make_email(chief.first_name, chief.last_name, used_chief_emails)
 
     foreman_idx_by_shift: dict[str, int] = {}
     for foreman in foremen:
@@ -414,6 +469,8 @@ def regenerate_personnel_identities(db: Session, rng: random.Random) -> tuple[in
         foreman.first_name, foreman.last_name = _take_name(name_pool)
         foreman.employee_number = f"SCL-{shift_code}-{idx:03d}"
         foreman.sap_personnel_number = f"SAP-P-{shift_code}{idx:03d}"
+        foreman.phone_number = _make_phone_number(rng, used_foreman_phones)
+        foreman.email = _make_email(foreman.first_name, foreman.last_name, used_foreman_emails)
 
     db.commit()
     return len(chiefs), len(foremen)

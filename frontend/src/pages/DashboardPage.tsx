@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowRight, HardHat, ShieldAlert, Trophy } from "lucide-react";
+import { HardHat, ShieldAlert, Trophy } from "lucide-react";
 import { FilterBar } from "../components/FilterBar";
 import { StatCard } from "../components/StatCard";
 import { Card } from "../components/StateViews";
@@ -11,26 +11,15 @@ import { RankingBarChart } from "../components/charts/RankingBarChart";
 import { DistributionChart } from "../components/charts/DistributionChart";
 import { ForemanRankingCard } from "../components/ForemanRankingCard";
 import { PerformanceLevelDetailModal } from "../components/PerformanceLevelDetailModal";
+import { CriticalAnomalyCard } from "../components/CriticalAnomalyCard";
+import { PlantHeatmap } from "../components/PlantHeatmap";
 import type { DistributionItem } from "../api/types";
 import {
-  useDashboardSummary, useDashboardTrend, useKpiSummary, usePlantRanking,
-  useShiftComparison, useForemanRanking, usePerformanceDistribution,
+  useDashboardSummary, useDashboardTrend, useKpiSummary,
+  useShiftComparison, useForemanRanking, useForemanTrendRanking, usePerformanceDistribution,
 } from "../api/hooks";
 import { useFilters } from "../hooks/useFilters";
 import { withSearchParam } from "../lib/chartDrilldown";
-
-function ViewAllLink({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="mt-3 inline-flex items-center gap-1 text-xs font-medium hover:underline"
-      style={{ color: "var(--accent)" }}
-    >
-      {label}
-      <ArrowRight size={13} strokeWidth={2} />
-    </button>
-  );
-}
 
 export function DashboardPage() {
   const { filters, setFilters, clearFilters, asQueryParams } = useFilters();
@@ -40,10 +29,11 @@ export function DashboardPage() {
   const summary = useDashboardSummary(asQueryParams);
   const trend = useDashboardTrend(asQueryParams, "day");
   const kpiSummary = useKpiSummary(asQueryParams);
-  const plantRanking = usePlantRanking(asQueryParams, "desc", 10);
   const shiftComparison = useShiftComparison(asQueryParams);
   const foremanRankingTop = useForemanRanking(asQueryParams, "desc", 5);
   const foremanRankingBottom = useForemanRanking(asQueryParams, "asc", 5);
+  const foremanTrendImproving = useForemanTrendRanking(asQueryParams, "improving", 5);
+  const foremanTrendDeclining = useForemanTrendRanking(asQueryParams, "declining", 5);
   const distribution = usePerformanceDistribution(asQueryParams);
   const [selectedLevel, setSelectedLevel] = useState<DistributionItem | null>(null);
 
@@ -78,6 +68,8 @@ export function DashboardPage() {
         </div>
       )}
 
+      <CriticalAnomalyCard />
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <Card title="Genel Performans Trendi">
@@ -108,6 +100,8 @@ export function DashboardPage() {
         </Card>
       </div>
 
+      <PlantHeatmap filters={asQueryParams} levels={distribution.data?.items} />
+
       {selectedLevel && (
         <PerformanceLevelDetailModal
           level={selectedLevel}
@@ -116,6 +110,20 @@ export function DashboardPage() {
           onNavigateForeman={(id) => navigate(`/foremen/${id}`)}
         />
       )}
+
+      <ForemanRankingCard
+        filters={filters}
+        topItems={foremanRankingTop.data?.items}
+        topLoading={foremanRankingTop.isLoading}
+        bottomItems={foremanRankingBottom.data?.items}
+        bottomLoading={foremanRankingBottom.isLoading}
+        improvingItems={foremanTrendImproving.data?.items}
+        improvingLoading={foremanTrendImproving.isLoading}
+        decliningItems={foremanTrendDeclining.data?.items}
+        decliningLoading={foremanTrendDeclining.isLoading}
+        onNavigateForeman={(id) => navigate(`/foremen/${id}`)}
+        onViewAll={() => navigate("/foremen")}
+      />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title="KPI Bazlı Ortalama Puan">
@@ -142,34 +150,6 @@ export function DashboardPage() {
             <ErrorState />
           )}
         </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Card title="Tesis Sıralaması (İlk 10)">
-          {plantRanking.isLoading ? (
-            <LoadingState />
-          ) : plantRanking.data ? (
-            <div>
-              <RankingBarChart
-                items={plantRanking.data.items.map((p) => ({ id: p.plant_id, name: p.name, score: p.total_score, color: p.level.color }))}
-                onSelect={(item) => navigate({ pathname: `/plants/${item.id}`, search: location.search })}
-              />
-              <ViewAllLink label="Tüm tesisleri görüntüle" onClick={() => navigate("/plants")} />
-            </div>
-          ) : (
-            <ErrorState />
-          )}
-        </Card>
-
-        <ForemanRankingCard
-          filters={filters}
-          topItems={foremanRankingTop.data?.items}
-          topLoading={foremanRankingTop.isLoading}
-          bottomItems={foremanRankingBottom.data?.items}
-          bottomLoading={foremanRankingBottom.isLoading}
-          onNavigateForeman={(id) => navigate(`/foremen/${id}`)}
-          onViewAll={() => navigate("/foremen")}
-        />
       </div>
     </div>
   );

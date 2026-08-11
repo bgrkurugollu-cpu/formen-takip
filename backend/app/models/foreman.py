@@ -19,6 +19,8 @@ class Chief(TimestampMixin, Base):
     hire_date: Mapped[date] = mapped_column(Date, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sap_personnel_number: Mapped[str | None] = mapped_column(String(30))
+    phone_number: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
 
     plants: Mapped[list["Plant"]] = relationship(back_populates="chief")
     assignments: Mapped[list["ForemanAssignment"]] = relationship(back_populates="chief")
@@ -37,6 +39,8 @@ class Foreman(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sap_personnel_number: Mapped[str | None] = mapped_column(String(30))
     photo_url: Mapped[str | None] = mapped_column(String(500))
+    phone_number: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
 
     assignments: Mapped[list["ForemanAssignment"]] = relationship(back_populates="foreman")
 

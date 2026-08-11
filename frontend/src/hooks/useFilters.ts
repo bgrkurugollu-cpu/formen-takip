@@ -9,6 +9,7 @@ export interface FilterState {
   chiefIds: string[];
   shiftIds: string[];
   kpiIds: string[];
+  foremanIds: string[];
 }
 
 function todayIso(): string {
@@ -21,6 +22,10 @@ function daysAgoIso(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function defaultDateRange(): [string, string] {
+  return [daysAgoIso(30), todayIso()];
+}
+
 const DEFAULTS: FilterState = {
   dateFrom: daysAgoIso(30),
   dateTo: todayIso(),
@@ -29,6 +34,7 @@ const DEFAULTS: FilterState = {
   chiefIds: [],
   shiftIds: [],
   kpiIds: [],
+  foremanIds: [],
 };
 
 function parseList(value: string | null): string[] {
@@ -47,6 +53,7 @@ export function useFilters() {
       chiefIds: parseList(searchParams.get("chief_ids")),
       shiftIds: parseList(searchParams.get("shift_ids")),
       kpiIds: parseList(searchParams.get("kpi_ids")),
+      foremanIds: parseList(searchParams.get("foreman_ids")),
     }),
     [searchParams]
   );
@@ -68,6 +75,7 @@ export function useFilters() {
       setOrDelete("chief_ids", next.chiefIds.join(","));
       setOrDelete("shift_ids", next.shiftIds.join(","));
       setOrDelete("kpi_ids", next.kpiIds.join(","));
+      setOrDelete("foreman_ids", next.foremanIds.join(","));
       setSearchParams(params, { replace: true });
     },
     [filters, searchParams, setSearchParams]
@@ -86,6 +94,7 @@ export function useFilters() {
       chief_ids: filters.chiefIds.join(",") || undefined,
       shift_ids: filters.shiftIds.join(",") || undefined,
       kpi_ids: filters.kpiIds.join(",") || undefined,
+      foreman_ids: filters.foremanIds.join(",") || undefined,
     }),
     [filters]
   );
