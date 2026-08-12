@@ -17,27 +17,23 @@ await page.fill('input[type="password"]', "Demo!2026");
 await page.click('button[type="submit"]');
 await page.waitForSelector("text=Genel Bakış", { timeout: 15000 });
 
-// Menüden Gruplar'a git
 await page.click('a[href="/groups"]');
 await page.waitForTimeout(2500);
 const total = (await page.locator("text=/Toplam \\d+ grup/").first().textContent())?.trim();
 console.log("Gruplar listesi:", total);
 await page.screenshot({ path: `${shotDir}/groups-list.png`, fullPage: true });
 
-// Sıralama: puana göre azalan
 await page.locator('thead button:has-text("Grup Puanı")').click();
 await page.waitForTimeout(2000);
 const scores = (await page.locator("tbody tr td:nth-child(6)").allTextContents()).map((t) => parseFloat(t));
 console.log("Puana göre azalan ilk 5:", scores.slice(0, 5).join(", "),
   "| monoton azalan mı:", scores.every((n, i) => i === 0 || n <= scores[i - 1]));
 
-// Sıralama: şef adına göre (Türkçe)
 await page.locator('thead button:has-text("Şef")').click();
 await page.waitForTimeout(2000);
 const names = (await page.locator("tbody tr td:nth-child(1)").allTextContents()).slice(0, 4);
 console.log("Ada göre artan ilk 4:", names.join(" | "));
 
-// Arama
 await page.fill('input[type="search"]', "SEF-05");
 await page.waitForTimeout(2000);
 const searchRows = await page.locator("tbody tr").count();
@@ -46,7 +42,6 @@ console.log("'SEF-05' aramasi:", searchRows, "satir |", searchNos.join(", "));
 await page.fill('input[type="search"]', "");
 await page.waitForTimeout(1800);
 
-// Fabrika filtresi
 const filterBar = page.locator("div.flex.flex-wrap.items-center.gap-2.rounded-lg.p-3").first();
 await filterBar.locator('button:has-text("Fabrika")').click();
 await page.waitForTimeout(300);
@@ -59,7 +54,6 @@ const k2Factories = new Set((await page.locator("tbody tr td:nth-child(3)").allT
 console.log("K2 filtresi:", k2Total, "| gorunen fabrikalar:", [...k2Factories].join(", "));
 await page.screenshot({ path: `${shotDir}/groups-k2.png`, fullPage: true });
 
-// Detay sayfası
 await page.locator("tbody tr").first().click();
 await page.waitForTimeout(3000);
 await page.screenshot({ path: `${shotDir}/group-detail.png`, fullPage: true });

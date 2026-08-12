@@ -13,8 +13,6 @@ export function TrendChart({ points, yAxisFloor }: { points: TrendPoint[]; yAxis
   if (points.length === 0) return <EmptyState />;
 
   const hasUnreliable = points.some((p) => !p.is_reliable);
-  // Varsayılan olarak 0'dan başlar; `yAxisFloor` verildiğinde (ör. en düşük formen puanının
-  // 20 altı) eksen o değerden başlar, böylece 100'e yakın kümelenen puanlar düz görünmez.
   const domainMin = yAxisFloor !== undefined ? Math.max(0, Math.floor(yAxisFloor)) : 0;
 
   return (

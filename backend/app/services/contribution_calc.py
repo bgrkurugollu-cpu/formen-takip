@@ -48,11 +48,6 @@ def duration_to_minutes(value: float | None, unit: TimeUnit | None) -> float | N
 
 
 def compute_time_saving(previous_duration: float | None, new_duration: float | None) -> float | None:
-    """Önceki - yeni süre; yeni süre öncekinden büyük/eşitse kazanç yok (None döner).
-
-    Girdiler Postgres `Numeric` kolonlarından geldiğinde SQLAlchemy `Decimal` döndürür;
-    burada `float`'a çevirmek, formül genelinde Decimal/float karışık aritmetiği önler.
-    """
     if previous_duration is None or new_duration is None:
         return None
     previous_duration, new_duration = float(previous_duration), float(new_duration)
@@ -70,7 +65,6 @@ def compute_monthly_total(
 
 
 def compute_change(previous: float | None, next_value: float | None) -> tuple[float | None, float | None]:
-    """(değişim miktarı, değişim yüzdesi). previous None veya 0 ise yüzde None döner."""
     if previous is None or next_value is None:
         return None, None
     previous, next_value = float(previous), float(next_value)
@@ -91,10 +85,6 @@ def is_improvement(gain_type: OtherGainType, change_amount: float | None) -> boo
 
 
 def resolve_highlighted_gain(work, gains: list) -> dict | None:
-    """Öne çıkan kazanımı önceliğe göre (veya manuel referansa göre) çözer.
-
-    `work` bir ContributionWork, `gains` ilişkili ContributionGain listesi.
-    """
     if work.highlighted_gain_mode.value == "manual" and work.highlighted_gain_ref:
         manual = _resolve_manual_ref(work, gains)
         if manual is not None:
@@ -234,7 +224,6 @@ REQUIRED_FOR_PUBLISH_MESSAGES = {
 
 
 def validate_for_publish(data: dict) -> dict[str, str]:
-    """`data` alan adı -> değer sözlüğü (payload veya mevcut kayıttan). Hata yoksa boş dict döner."""
     errors: dict[str, str] = {}
 
     if not data.get("title"):

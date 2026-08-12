@@ -12,13 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import SourceSystem
 from app.models.production import CompanyCalendarDay, ForemanWorkCalendar, Product, ProductionLine, ProductionRecord
+from app.services.shift_rotation import actual_shift_for_date
 from app.services.synthetic.reference_data import ReferenceData
 
 FIXED_HOLIDAYS_MMDD = {(1, 1), (4, 23), (5, 1), (5, 19), (7, 15), (8, 30), (10, 29)}
 
-# Şirket ürün kataloğu (SAP malzeme master'ının sentetik karşılığı). Bilinçli olarak
-# iki üründe standart gramaj tanımlı bırakılmamıştır — bu ürünlere bağlı üretim
-# kayıtları için Ağır Gitme KPI'sı hesaplanmayacaktır (bkz. production_kpi_derivation.py).
 PRODUCT_CATALOG = [
     dict(code="MLZ-001", name="Yem Tipi A - 40gr Paket", standard_gram=40.0, tolerance_pct=0.05),
     dict(code="MLZ-002", name="Yem Tipi B - 25gr Paket", standard_gram=25.0, tolerance_pct=0.06),
@@ -113,7 +111,7 @@ def _build_plant_profiles(plants, rng: random.Random) -> dict:
 
 
 def _build_foreman_profiles(foremen, rng: random.Random) -> dict:
-    return {f.id: {"skill": rng.uniform(-0.15, 0.15), "trend": rng.uniform(-0.0004, 0.0004)} for f in foremen}
+    return {f.id: {"skill": rng.uniform(-0.35, 0.35), "trend": rng.uniform(-0.0004, 0.0004)} for f in foremen}
 
 
 def _build_maintenance_windows(plants, rng: random.Random, period_start: date, period_end: date) -> dict:
@@ -168,9 +166,6 @@ def seed_production_data(
         if not foreman_assignments:
             continue
 
-        # Bir formenin tüm eşzamanlı atamaları (2-4 tesis) aynı vardiyayı ve aynı tenure
-        # aralığını paylaşır (bkz. reference_data.py) — her atama kendi tesisi için ayrı
-        # günlük kayıt üretir (natural key'ler artık plant_id içeriyor, bkz. production.py).
         tenure_start = foreman_assignments[0].start_date
         tenure_end = foreman_assignments[0].end_date
         range_start = max(tenure_start, period_start)
@@ -178,8 +173,7 @@ def seed_production_data(
         if range_start > range_end:
             continue
 
-        shift = shifts_by_id[foreman_assignments[0].shift_id]
-        night_penalty = -0.05 if shift.code == "V3" else (-0.015 if shift.code == "V2" else 0.0)
+        anchor_shift = shifts_by_id[foreman_assignments[0].shift_id]
 
         for assignment in foreman_assignments:
             plant_profile = plant_profiles[assignment.plant_id]
@@ -188,6 +182,9 @@ def seed_production_data(
 
             d = range_start
             while d <= range_end:
+                shift = actual_shift_for_date(d, anchor_shift, ref.shifts)
+                night_penalty = -0.05 if shift.code == "V2" else 0.0
+
                 is_holiday = d in result.holiday_dates
                 is_absent = (not is_holiday) and rng.random() < 0.03
                 is_working = not is_holiday and not is_absent
@@ -195,7 +192,7 @@ def seed_production_data(
 
                 calendar_row = ForemanWorkCalendar(
                     foreman_id=foreman.id, work_date=d, plant_id=assignment.plant_id,
-                    chief_id=assignment.chief_id, shift_id=assignment.shift_id, line_id=line.id,
+                    chief_id=assignment.chief_id, shift_id=shift.id, line_id=line.id,
                     is_working=is_working,
                 )
                 db.add(calendar_row)
@@ -222,12 +219,9 @@ def seed_production_data(
                 )
                 pf = _clip(pf, -0.6, 0.45)
 
-                # Teknik + İmalat puanlamaya dahil edilir (spec bölüm 3.4/7); Diğer (format değişimi,
-                # temizlik, planlı bakım) puanlamaya hiç dahil edilmez — eski planned/unplanned ikilisi
-                # yerini bu üç bileşene bırakır (bkz. production_kpi_derivation.py).
                 downtime_multiplier = _clip(1.0 - pf * 1.4, 0.15, 3.2)
-                technical_minutes = max(0.0, 18.0 * downtime_multiplier + rng.gauss(0, 4))
-                manufacturing_minutes = max(0.0, 12.0 * downtime_multiplier + rng.gauss(0, 3))
+                technical_minutes = max(0.0, 45.0 * downtime_multiplier + rng.gauss(0, 6))
+                manufacturing_minutes = max(0.0, 30.0 * downtime_multiplier + rng.gauss(0, 4))
                 other_minutes = max(0.0, rng.uniform(10, 25) + rng.gauss(0, 3))
                 if is_maintenance:
                     other_minutes += rng.uniform(90, 220)
@@ -246,7 +240,7 @@ def seed_production_data(
 
                 product = rng.choice(products)
                 gram_baseline = float(product.standard_gram) if product.standard_gram is not None else 35.0
-                gram_overage = _clip(0.4 - pf * 3.0 + rng.gauss(0, 0.5), -1.0, 8.0)
+                gram_overage = _clip(1.4 - pf * 5.5 + rng.gauss(0, 0.5), -1.2, 8.0)
                 measured_avg_gram = gram_baseline + gram_overage
                 gram_sample_count = rng.randint(15, 40)
 
@@ -255,6 +249,7 @@ def seed_production_data(
                 planned_end = datetime.combine(end_date, shift.end_time, tzinfo=timezone.utc)
                 actual_start = planned_start + timedelta(minutes=rng.gauss(0, 4))
                 actual_end = planned_end + timedelta(minutes=rng.gauss(0, 6))
+                shift_hours = (planned_end - planned_start).total_seconds() / 3600.0
 
                 roll = rng.random()
                 if roll < params.missing_rate:
@@ -264,11 +259,11 @@ def seed_production_data(
                     actual_end_val = None
                 elif roll < params.missing_rate + params.error_rate:
                     actual_qty = -abs(actual_qty) - rng.uniform(1, 50)
-                    actual_speed = actual_qty / 8.0 if actual_qty else None
+                    actual_speed = actual_qty / shift_hours if actual_qty else None
                     actual_start_val = actual_start
                     actual_end_val = actual_end
                 else:
-                    actual_speed = actual_qty / 8.0
+                    actual_speed = actual_qty / shift_hours
                     actual_start_val = actual_start
                     actual_end_val = actual_end
 
@@ -279,12 +274,12 @@ def seed_production_data(
                     production_order_number=f"45{seq:08d}",
                     batch_number=f"LOT-{d.strftime('%y%m%d')}-{seq % 100:02d}",
                     plant_id=assignment.plant_id, line_id=line.id, product_id=product.id,
-                    foreman_id=foreman.id, chief_id=assignment.chief_id, shift_id=assignment.shift_id,
+                    foreman_id=foreman.id, chief_id=assignment.chief_id, shift_id=shift.id,
                     production_date=d, unit="KG",
                     planned_qty=planned_qty, actual_qty=actual_qty,
                     planned_start_at=planned_start, planned_end_at=planned_end,
                     actual_start_at=actual_start_val, actual_end_at=actual_end_val,
-                    standard_speed=planned_qty / 8.0, actual_speed=actual_speed,
+                    standard_speed=planned_qty / shift_hours, actual_speed=actual_speed,
                     measured_avg_gram=measured_avg_gram, gram_sample_count=gram_sample_count,
                     gsf_qty=gsf_qty, iskarta_qty=iskarta_qty,
                     technical_downtime_minutes=technical_minutes, manufacturing_downtime_minutes=manufacturing_minutes,

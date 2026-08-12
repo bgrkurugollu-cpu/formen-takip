@@ -1,17 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 import type {
-  ActionPlanCreatePayload,
-  ActionPlanItem,
-  ActionPlanUpdatePayload,
   AnalysisMode,
   AnomalyDetail,
+  AnomalyInvestigation,
   AnomalyListItem,
   AnomalyStatus,
   AnomalySummary,
   AnomalyToolCallItem,
   AssignmentHistoryItem,
-  AuditLogEntry,
   CalculationDetail,
   ChiefDetail,
   ChiefForemanItem,
@@ -21,25 +18,29 @@ import type {
   ContributionWorkItem,
   ContributionWorkUpdatePayload,
   DashboardSummary,
-  DataQualityIssue,
-  DataQualitySummary,
   DistributionItem,
   FilterOptionsResponse,
   ForemanContributionSummary,
   ForemanDetail,
   ForemanKpiItem,
   ForemanListItem,
-  IntegrationRunItem,
   KpiAnalysis,
   KpiListItem,
   KpiSummaryItem,
+  MonthlyReportDetail,
+  MonthlyReportLatest,
+  MonthlyReportSummary,
   PagedResponse,
   PlantListItem,
   PlantRankingItem,
   ReportExportMeta,
   ReportFormat,
   ReportType,
+  ForemanShiftMatrixResponse,
+  ShiftAnalysisCardsResponse,
+  ShiftAnomalyDetail,
   ShiftComparisonItem,
+  ShiftHeatmapResponse,
   TrendPoint,
 } from "./types";
 
@@ -99,6 +100,14 @@ export function useForemanRanking(params: Params, order: "asc" | "desc", limit: 
     queryKey: ["dashboard", "foreman-ranking", params, order, limit],
     queryFn: async () =>
       (await apiClient.get<{ items: import("./types").ForemanRankingItem[] }>("/dashboard/foreman-ranking", { params: { ...params, order, limit } })).data,
+  });
+}
+
+export function useForemanTrendRanking(params: Params, direction: "improving" | "declining", limit: number) {
+  return useQuery({
+    queryKey: ["dashboard", "foreman-trend-ranking", params, direction, limit],
+    queryFn: async () =>
+      (await apiClient.get<{ items: import("./types").ForemanTrendRankingItem[] }>("/dashboard/foreman-trend-ranking", { params: { ...params, direction, limit } })).data,
   });
 }
 
@@ -171,6 +180,15 @@ export function useForemen(params: Params) {
   });
 }
 
+export function useForemenByIds(ids: string[]) {
+  return useQuery({
+    enabled: ids.length > 0,
+    queryKey: ["foremen", "by-ids", ids],
+    queryFn: async () =>
+      (await apiClient.get<PagedResponse<ForemanListItem>>("/foremen", { params: { ids: ids.join(","), page_size: Math.max(ids.length, 1) } })).data,
+  });
+}
+
 export function useForemanDetail(foremanId: string | undefined, params: Params) {
   return useQuery({
     enabled: !!foremanId,
@@ -218,6 +236,33 @@ export function useForemanContributionSummary(foremanId: string | undefined) {
     queryKey: ["foremen", foremanId, "contribution-summary"],
     queryFn: async () =>
       (await apiClient.get<ForemanContributionSummary>(`/foremen/${foremanId}/contribution-summary`)).data,
+  });
+}
+
+export function useForemanMonthlyReports(foremanId: string | undefined) {
+  return useQuery({
+    enabled: !!foremanId,
+    queryKey: ["foremen", foremanId, "monthly-reports"],
+    queryFn: async () =>
+      (await apiClient.get<{ items: MonthlyReportSummary[] }>(`/foremen/${foremanId}/monthly-reports`)).data,
+  });
+}
+
+export function useForemanMonthlyReportLatest(foremanId: string | undefined) {
+  return useQuery({
+    enabled: !!foremanId,
+    queryKey: ["foremen", foremanId, "monthly-reports", "latest"],
+    queryFn: async () =>
+      (await apiClient.get<MonthlyReportLatest>(`/foremen/${foremanId}/monthly-reports/latest`)).data,
+  });
+}
+
+export function useForemanMonthlyReport(foremanId: string | undefined, year: number | undefined, month: number | undefined) {
+  return useQuery({
+    enabled: !!foremanId && !!year && !!month,
+    queryKey: ["foremen", foremanId, "monthly-reports", year, month],
+    queryFn: async () =>
+      (await apiClient.get<MonthlyReportDetail>(`/foremen/${foremanId}/monthly-reports/${year}/${month}`)).data,
   });
 }
 
@@ -289,75 +334,6 @@ export function useKpiAnalysis(kpiId: string | undefined, params: Params) {
   });
 }
 
-
-export function useDataQualityIssues(params: Params) {
-  return useQuery({
-    queryKey: ["data-quality", "issues", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<DataQualityIssue>>("/data-quality/issues", { params })).data,
-  });
-}
-
-export function useDataQualitySummary() {
-  return useQuery({
-    queryKey: ["data-quality", "summary"],
-    queryFn: async () => (await apiClient.get<DataQualitySummary>("/data-quality/summary")).data,
-  });
-}
-
-export function useIntegrationRuns(params: Params) {
-  return useQuery({
-    queryKey: ["integration", "runs", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<IntegrationRunItem>>("/integration/runs", { params })).data,
-  });
-}
-
-export function useTriggerResync() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: { date_from: string; date_to: string; plant_codes?: string[] }) =>
-      (await apiClient.post<IntegrationRunItem>("/integration/resync", payload)).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["integration", "runs"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
-}
-
-export function useAuditLogs(params: Params) {
-  return useQuery({
-    queryKey: ["audit-logs", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<AuditLogEntry>>("/audit-logs", { params })).data,
-  });
-}
-
-export function useActionPlans(params: Params) {
-  return useQuery({
-    queryKey: ["action-plans", params],
-    queryFn: async () => (await apiClient.get<PagedResponse<ActionPlanItem>>("/action-plans", { params })).data,
-  });
-}
-
-export function useCreateActionPlan() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: ActionPlanCreatePayload) =>
-      (await apiClient.post<ActionPlanItem>("/action-plans", payload)).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["action-plans"] });
-    },
-  });
-}
-
-export function useUpdateActionPlan() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: ActionPlanUpdatePayload }) =>
-      (await apiClient.patch<ActionPlanItem>(`/action-plans/${id}`, payload)).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["action-plans"] });
-    },
-  });
-}
 
 export function useReportHistory(params: Params) {
   return useQuery({
@@ -440,7 +416,6 @@ export function useContributionSummary(params: Params = {}) {
   });
 }
 
-// --- Tespitler (Anomalies) ---
 
 export function useAnomalies(params: Params) {
   return useQuery({
@@ -503,11 +478,55 @@ export function useUpdateAnomalyStatus() {
   });
 }
 
+export function useAnomalyInvestigation(id: string | undefined) {
+  return useQuery({
+    queryKey: ["anomalies", id, "investigation"],
+    queryFn: async () => (await apiClient.get<AnomalyInvestigation>(`/anomalies/${id}/investigation`)).data,
+    enabled: !!id,
+  });
+}
+
 export function useAnalysisToolCalls(analysisId: string | undefined) {
   return useQuery({
     queryKey: ["analyses", analysisId, "tool-calls"],
     queryFn: async () =>
       (await apiClient.get<{ items: AnomalyToolCallItem[]; total: number }>(`/analyses/${analysisId}/tool-calls`)).data,
     enabled: !!analysisId,
+  });
+}
+
+
+export function useShiftAnalysisCards(params: Params) {
+  return useQuery({
+    queryKey: ["shift-analysis", "cards", params],
+    queryFn: async () => (await apiClient.get<ShiftAnalysisCardsResponse>("/shift-analysis/cards", { params })).data,
+  });
+}
+
+export function useShiftAnalysisDetail(params: { plant_id?: string; shift_id?: string; kpi_id?: string; month?: string }) {
+  return useQuery({
+    queryKey: ["shift-analysis", "detail", params],
+    queryFn: async () => (await apiClient.get<ShiftAnomalyDetail>("/shift-analysis/detail", { params })).data,
+    enabled: !!(params.plant_id && params.shift_id && params.kpi_id),
+  });
+}
+
+export function useShiftHeatmap(params: Params) {
+  return useQuery({
+    queryKey: ["shift-analysis", "heatmap", params],
+    queryFn: async () => (await apiClient.get<ShiftHeatmapResponse>("/shift-analysis/heatmap", { params })).data,
+  });
+}
+
+export function usePlantForemanShiftMatrix(plantId: string | undefined, kpiId: string | undefined, params: Params) {
+  return useQuery({
+    enabled: !!plantId && !!kpiId,
+    queryKey: ["plants", plantId, "foreman-shift-matrix", kpiId, params],
+    queryFn: async () =>
+      (
+        await apiClient.get<ForemanShiftMatrixResponse>(`/plants/${plantId}/foreman-shift-matrix`, {
+          params: { ...params, kpi_id: kpiId },
+        })
+      ).data,
   });
 }

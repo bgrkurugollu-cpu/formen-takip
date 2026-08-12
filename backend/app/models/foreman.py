@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import Boolean, Date, ForeignKey, ForeignKeyConstraint, String
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, ForeignKeyConstraint, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -9,9 +9,6 @@ from app.db.base import Base, TimestampMixin
 
 
 class Chief(TimestampMixin, Base):
-    """Bir şef artık tek bir tesise değil, tesislerden oluşan sabit bir bölgeye ("zone")
-    sorumludur — bkz. `Plant.chief_id` ve `app/services/synthetic/reference_data.py`.
-    Bu bölgedeki her formen (her vardiyada bir tane) yalnızca bu şefe bağlıdır."""
 
     __tablename__ = "chiefs"
 
@@ -22,6 +19,8 @@ class Chief(TimestampMixin, Base):
     hire_date: Mapped[date] = mapped_column(Date, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sap_personnel_number: Mapped[str | None] = mapped_column(String(30))
+    phone_number: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
 
     plants: Mapped[list["Plant"]] = relationship(back_populates="chief")
     assignments: Mapped[list["ForemanAssignment"]] = relationship(back_populates="chief")
@@ -40,6 +39,8 @@ class Foreman(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sap_personnel_number: Mapped[str | None] = mapped_column(String(30))
     photo_url: Mapped[str | None] = mapped_column(String(500))
+    phone_number: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
 
     assignments: Mapped[list["ForemanAssignment"]] = relationship(back_populates="foreman")
 
@@ -49,6 +50,8 @@ class ForemanAssignment(TimestampMixin, Base):
     __tablename__ = "foreman_assignments"
     __table_args__ = (
         ForeignKeyConstraint(["plant_id", "chief_id"], ["plants.id", "plants.chief_id"], name="fk_foreman_assignments_plant_chief"),
+        CheckConstraint("end_date IS NULL OR end_date >= start_date", name="ck_foreman_assignments_date_range"),
+        CheckConstraint("is_active = true OR end_date IS NOT NULL", name="ck_foreman_assignments_inactive_has_end_date"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

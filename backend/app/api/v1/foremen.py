@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -11,12 +11,15 @@ from app.db.session import get_db
 from app.models.contribution import ContributionWork, ContributionWorkForeman
 from app.models.enums import ContributionRole, ContributionStatus, ContributionWorkType
 from app.models.foreman import Chief, Foreman, ForemanAssignment
+from app.models.foreman_report import ForemanMonthlyReport
 from app.models.kpi import Kpi, KpiCalculationRule
 from app.models.organization import Plant, Shift
-from app.schemas.common import Filters, PageParams, common_filters, page_params
+from app.schemas.common import Filters, PageParams, common_filters, page_params, parse_uuid_list
 from app.services import analytics
 from app.services.kpi_engine import resolve_performance_level
 from app.services.level_lookup import get_performance_levels, level_to_dict
+from app.services.monthly_foreman_report import get_or_generate_monthly_report, latest_completed_period
+from app.services.monthly_foreman_report_pdf import render_monthly_foreman_report_pdf
 
 router = APIRouter(prefix="/foremen", tags=["foremen"])
 
@@ -54,11 +57,13 @@ def _assignments_to_dict(
 @router.get("")
 def list_foremen(
     search: str | None = Query(None),
+    ids: str | None = Query(None, description="Virgülle ayrılmış formen ID listesi (isim çözümleme için)"),
     plant_id: UUID | None = Query(None),
     chief_id: UUID | None = Query(None),
     shift_id: UUID | None = Query(None),
     is_active: bool | None = Query(None),
-    sort_by: str = Query("name", pattern="^(name|employee_number|plant|chief|shift|score|level|reliability)$"),
+    level: str | None = Query(None),
+    sort_by: str = Query("name", pattern="^(name|employee_number|plant|chief|score|level|reliability)$"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
     page: PageParams = Depends(page_params),
     filters: Filters = Depends(common_filters),
@@ -74,6 +79,8 @@ def list_foremen(
             | Foreman.last_name.ilike(f"%{search}%")
             | Foreman.employee_number.ilike(f"%{search}%")
         )
+    if ids:
+        query = query.where(Foreman.id.in_(parse_uuid_list(ids) or []))
     if is_active is not None:
         query = query.where(Foreman.is_active == is_active)
 
@@ -84,7 +91,7 @@ def list_foremen(
     if shift_id:
         filters.shift_ids = [shift_id]
 
-    if filters.factory_ids or filters.plant_ids or filters.chief_ids or filters.shift_ids:
+    if filters.factory_ids or filters.plant_ids or filters.chief_ids:
         assignment_query = select(ForemanAssignment.foreman_id).where(
             ForemanAssignment.start_date <= filters.date_to,
             (ForemanAssignment.end_date.is_(None)) | (ForemanAssignment.end_date >= filters.date_from),
@@ -97,8 +104,6 @@ def list_foremen(
             assignment_query = assignment_query.where(ForemanAssignment.plant_id.in_(filters.plant_ids))
         if filters.chief_ids:
             assignment_query = assignment_query.where(ForemanAssignment.chief_id.in_(filters.chief_ids))
-        if filters.shift_ids:
-            assignment_query = assignment_query.where(ForemanAssignment.shift_id.in_(filters.shift_ids))
         query = query.where(Foreman.id.in_(assignment_query))
 
     all_foremen = list(db.scalars(query))
@@ -111,7 +116,6 @@ def list_foremen(
         for a in db.scalars(select(ForemanAssignment).where(ForemanAssignment.foreman_id.in_(foreman_ids))):
             assignments_by_foreman.setdefault(a.foreman_id, []).append(a)
     plants_by_id = {p.id: p for p in db.scalars(select(Plant))}
-    shifts_by_id = {s.id: s for s in db.scalars(select(Shift))}
     chiefs_by_id = {c.id: c for c in db.scalars(select(Chief))}
 
     factory_plant_ids = (
@@ -127,8 +131,6 @@ def list_foremen(
             return False
         if filters.chief_ids and a.chief_id not in set(filters.chief_ids):
             return False
-        if filters.shift_ids and a.shift_id not in set(filters.shift_ids):
-            return False
         return True
 
     def matching_assignments(fid: UUID) -> list[ForemanAssignment]:
@@ -143,36 +145,34 @@ def list_foremen(
         assignments = matching_assignments(f.id)
         gs = scores_by_foreman.get(f.id)
         score = gs.total_score if gs else 0.0
-        shift = shifts_by_id.get(assignments[0].shift_id) if assignments else None
         assignment_items = _assignments_to_dict(assignments, plants_by_id, chiefs_by_id)
         min_plant_seq = min(
             (plants_by_id[a.plant_id].sequence_number for a in assignments), default=-1
         )
-        # Bir formen artık her zaman TEK bir şefe bağlı olduğundan (bkz. Organizasyon
-        # Hiyerarşisi), tüm atamalar aynı şefi taşır — ilkini almak yeterlidir.
         chief_name = assignment_items[0]["chief"]["name"] if assignment_items else ""
-        level = resolve_performance_level(score, levels)
+        f_level = resolve_performance_level(score, levels)
         full_items.append(
             {
                 "id": str(f.id), "employee_number": f.employee_number,
                 "full_name": f"{f.first_name} {f.last_name}", "is_active": f.is_active,
                 "assignments": assignment_items,
-                "shift": {"id": str(shift.id), "name": shift.name} if shift else None,
                 "total_score": round(score, 2),
                 "is_reliable": gs.is_reliable if gs else False,
-                "level": level_to_dict(level),
+                "level": level_to_dict(f_level),
                 "_sort": {
                     "name": (turkish_sort_key(f.first_name), turkish_sort_key(f.last_name)),
                     "employee_number": f.employee_number,
                     "plant": min_plant_seq,
                     "chief": turkish_sort_key(chief_name) if chief_name else (),
-                    "shift": turkish_sort_key(shift.name) if shift else (),
                     "score": score,
-                    "level": level.sort_order,
+                    "level": f_level.sort_order,
                     "reliability": gs.is_reliable if gs else False,
                 },
             }
         )
+
+    if level:
+        full_items = [it for it in full_items if it["level"]["name"] == level]
 
     reverse = sort_dir == "desc"
     full_items.sort(key=lambda it: it["_sort"][sort_by], reverse=reverse)
@@ -198,9 +198,6 @@ def get_foreman(
     plants_by_id = {p.id: p for p in db.scalars(select(Plant).where(Plant.id.in_({a.plant_id for a in assignments})))}
     chiefs_by_id = {c.id: c for c in db.scalars(select(Chief).where(Chief.id.in_({a.chief_id for a in assignments})))}
     assignment_items = _assignments_to_dict(assignments, plants_by_id, chiefs_by_id)
-    shift = db.get(Shift, assignments[0].shift_id) if assignments else None
-    # "Tesis İçi Sıralaması" formen birden fazla tesise bağlı olabileceğinden, sıralama
-    # yalnızca formenin en düşük sıra numaralı (birincil) tesisine göre hesaplanır.
     primary_plant = min(
         (plants_by_id[a.plant_id] for a in assignments), key=lambda p: p.sequence_number, default=None
     )
@@ -224,8 +221,8 @@ def get_foreman(
         "id": str(foreman.id), "employee_number": foreman.employee_number,
         "full_name": f"{foreman.first_name} {foreman.last_name}",
         "hire_date": foreman.hire_date.isoformat(), "is_active": foreman.is_active,
+        "phone_number": foreman.phone_number, "email": foreman.email,
         "assignments": assignment_items,
-        "shift": {"id": str(shift.id), "name": shift.name} if shift else None,
         "total_score": round(total_score, 2),
         "is_reliable": my_score.is_reliable if my_score else False,
         "level": level_to_dict(resolve_performance_level(total_score, levels)),
@@ -268,9 +265,6 @@ def foreman_kpis(
             "data_quality_status": "complete" if row["record_count"] > 0 else "missing",
             "source_system": "SYNTHETIC",
         }
-        # KPI'a özel ek alanlar (spec bölüm 14) — mevcut dönemsel toplamlardan (yeni sorgu gerektirmeden)
-        # türetilir; ham teknik/imalat/diğer dakika kırılımı veya plan/fiili ayrı miktarları gibi daha
-        # ayrıntılı alanlar bilinçli olarak kapsam dışı bırakıldı.
         if kpi.code == "AGIR_GITME" and avg_actual is not None:
             direction = "OVERWEIGHT" if avg_actual > 0 else ("UNDERWEIGHT" if avg_actual < 0 else "ON_TARGET")
             item["agir_gitme"] = {
@@ -287,9 +281,20 @@ def foreman_kpis(
                 "note": "Diğer duruş süresi puana dahil edilmez.",
             }
         elif kpi.code == "PLANA_UYUM" and avg_actual is not None:
-            direction = "OVER_PLAN" if avg_actual > 100 else ("UNDER_PLAN" if avg_actual < 100 else "ON_PLAN")
+            planned_qty = row.get("denominator_sum")
+            actual_qty = row.get("numerator_sum")
+            kg_diff = (actual_qty - planned_qty) if (planned_qty is not None and actual_qty is not None) else None
+            signed_pct_deviation = (kg_diff / planned_qty * 100.0) if (kg_diff is not None and planned_qty) else None
+            direction = (
+                "ABOVE_PLAN" if (signed_pct_deviation or 0) > 0
+                else ("BELOW_PLAN" if (signed_pct_deviation or 0) < 0 else "ON_PLAN")
+            )
             item["plana_uyum"] = {
                 "avg_attainment_pct": round(avg_actual, kpi.decimal_places),
+                "planned_qty": round(planned_qty, 2) if planned_qty is not None else None,
+                "actual_qty": round(actual_qty, 2) if actual_qty is not None else None,
+                "kg_diff": round(kg_diff, 2) if kg_diff is not None else None,
+                "signed_pct_deviation": round(signed_pct_deviation, 2) if signed_pct_deviation is not None else None,
                 "direction": direction,
             }
         items.append(item)
@@ -305,7 +310,7 @@ def foreman_kpi_calculation_detail(foreman_id: UUID, kpi_id: UUID, db: Session =
     record, score = row
     kpi = db.get(Kpi, kpi_id)
     rule = db.get(KpiCalculationRule, score.calculation_rule_id)
-    return {
+    detail = {
         "performance_date": record.performance_date.isoformat(),
         "target_value": float(record.target_value) if record.target_value is not None else None,
         "actual_value": float(record.actual_value) if record.actual_value is not None else None,
@@ -322,6 +327,24 @@ def foreman_kpi_calculation_detail(foreman_id: UUID, kpi_id: UUID, db: Session =
         "data_source": record.source_system.value,
         "source_record_id": record.source_record_id,
     }
+    if kpi is not None and kpi.code == "PLANA_UYUM":
+        planned_qty = float(record.denominator_value) if record.denominator_value is not None else None
+        actual_qty = float(record.numerator_value) if record.numerator_value is not None else None
+        kg_diff = (actual_qty - planned_qty) if (planned_qty is not None and actual_qty is not None) else None
+        signed_pct_deviation = (kg_diff / planned_qty * 100.0) if (kg_diff is not None and planned_qty) else None
+        status = (
+            "ABOVE_PLAN" if (signed_pct_deviation or 0) > 0
+            else ("BELOW_PLAN" if (signed_pct_deviation or 0) < 0 else "ON_PLAN")
+        )
+        detail["plana_uyum"] = {
+            "planned_qty": round(planned_qty, 2) if planned_qty is not None else None,
+            "actual_qty": round(actual_qty, 2) if actual_qty is not None else None,
+            "kg_diff": round(kg_diff, 2) if kg_diff is not None else None,
+            "signed_pct_deviation": round(signed_pct_deviation, 2) if signed_pct_deviation is not None else None,
+            "status": status,
+            "formula_version": rule.version if rule else None,
+        }
+    return detail
 
 
 @router.get("/{foreman_id}/trend")
@@ -373,12 +396,6 @@ def assignment_history(foreman_id: UUID, db: Session = Depends(get_db), _=Depend
 def foreman_contribution_summary(
     foreman_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)
 ) -> dict:
-    """Formen detay sayfasındaki kompakt Katkı ve İyileştirme Çalışmaları kartı için hafif özet.
-
-    Yalnızca yayımlanmış çalışmalar dahil edilir. Ortak çalışmalarda maddi kazanç ve zaman
-    tasarrufu, formen kendi tek başına ürettiği kazanç gibi gösterilmesin diye çalışmadaki
-    formen sayısına eşit bölünerek (pay bulunmuyorsa otomatik eşit dağıtım) toplanır.
-    """
     if db.get(Foreman, foreman_id) is None:
         raise HTTPException(404, "Formen bulunamadı.")
 
@@ -442,3 +459,78 @@ def foreman_contribution_summary(
         "total_time_saving_minutes": round(total_time_saving, 2),
         "last_contribution_date": last_date.isoformat() if last_date else None,
     }
+
+
+def _monthly_report_summary(report: ForemanMonthlyReport) -> dict:
+    return {
+        "year": report.year,
+        "month": report.month,
+        "generated_at": report.generated_at.isoformat(),
+        "overall_score": float(report.overall_score) if report.overall_score is not None else None,
+        "overall_level_name": report.overall_level_name,
+        "is_reliable": report.is_reliable,
+    }
+
+
+@router.get("/{foreman_id}/monthly-reports")
+def foreman_monthly_reports(foreman_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    reports = list(
+        db.scalars(
+            select(ForemanMonthlyReport)
+            .where(ForemanMonthlyReport.foreman_id == foreman_id)
+            .order_by(ForemanMonthlyReport.year.desc(), ForemanMonthlyReport.month.desc())
+        )
+    )
+    return {"items": [_monthly_report_summary(r) for r in reports]}
+
+
+@router.get("/{foreman_id}/monthly-reports/latest")
+def foreman_monthly_report_latest(foreman_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    latest = db.scalar(
+        select(ForemanMonthlyReport)
+        .where(ForemanMonthlyReport.foreman_id == foreman_id)
+        .order_by(ForemanMonthlyReport.year.desc(), ForemanMonthlyReport.month.desc())
+        .limit(1)
+    )
+    if latest is None:
+        year, month = latest_completed_period()
+        try:
+            latest = get_or_generate_monthly_report(db, foreman_id, year, month)
+        except ValueError:
+            return {"available": False}
+    return {"available": True, **_monthly_report_summary(latest), "report_data": latest.report_data}
+
+
+@router.get("/{foreman_id}/monthly-reports/{year}/{month}")
+def foreman_monthly_report_detail(
+    foreman_id: UUID, year: int, month: int, db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> dict:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    try:
+        report = get_or_generate_monthly_report(db, foreman_id, year, month)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {**_monthly_report_summary(report), "report_data": report.report_data}
+
+
+@router.get("/{foreman_id}/monthly-reports/{year}/{month}/pdf")
+def foreman_monthly_report_pdf(
+    foreman_id: UUID, year: int, month: int, db: Session = Depends(get_db), _=Depends(get_current_user)
+) -> Response:
+    if db.get(Foreman, foreman_id) is None:
+        raise HTTPException(404, "Formen bulunamadı.")
+    try:
+        report = get_or_generate_monthly_report(db, foreman_id, year, month)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    pdf_bytes = render_monthly_foreman_report_pdf(report.report_data)
+    file_name = f"formen-performans-raporu-{report.report_data['foreman']['employee_number']}-{year}-{month:02d}.pdf"
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )

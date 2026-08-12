@@ -20,7 +20,6 @@ await page.goto(`${BASE}/foremen`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${shotDir}/names-foremen.png`, fullPage: true });
 
-// Sicil No sütununa göre sırala — aynı tesisin formenleri yan yana gelsin
 await page.click('button:has-text("Sicil No")');
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${shotDir}/names-foremen-by-sicil.png`, fullPage: true });

@@ -51,7 +51,7 @@ class TestKpiSeriesConsistency:
     def test_flagged_shift_series_matches_compare_shifts(self, db_session):
         anchor = _sample_anchor(db_session)
         if anchor.shift_id is None:
-            return  # yalnızca vardiyaya özel tespitler için anlamlı
+            return
         plant = db_session.get(Plant, anchor.plant_id)
         kpi = db_session.get(Kpi, anchor.kpi_id)
         shift = db_session.get(Shift, anchor.shift_id)
@@ -80,8 +80,6 @@ class TestKpiSeriesConsistency:
         assert min(values) <= result.plant_average <= max(values)
 
     def test_no_anchor_plant_kpi_combination_is_near_generic_baseline(self, db_session):
-        # Seed edilmiş 24 tespit, 50 tesis x 5 KPI'nin küçük bir alt kümesini kaplar — anchor'sız
-        # bir kombinasyon bulup "sağlıklı" (temiz) sentetik seri ürettiğini doğrula.
         anchored_pairs = {(a.plant_id, a.kpi_id) for a in db_session.scalars(select(Anomaly))}
         plants = list(db_session.scalars(select(Plant).where(Plant.is_active.is_(True))))
         kpis = list(db_session.scalars(select(Kpi)))
@@ -134,5 +132,4 @@ class TestSimilarHistoricalCases:
         target = resolved[0]
         cases = world.similar_historical_cases(db_session, target.id, None, None, None, None, limit=20)
         matching = [c for c in cases if c["anomaly_code"] == target.code]
-        # target kendisi hariç tutulur; en azından fonksiyon hatasız dönmeli
         assert isinstance(cases, list)

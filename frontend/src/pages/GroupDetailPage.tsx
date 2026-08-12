@@ -5,7 +5,6 @@ import { Card, EmptyState, ErrorState, LoadingState } from "../components/StateV
 import { PerformanceLevelBadge } from "../components/PerformanceLevelBadge";
 import { TrendChart } from "../components/charts/TrendChart";
 import { KpiRadarChart } from "../components/charts/KpiRadarChart";
-import { RelatedActionPlans } from "../components/RelatedActionPlans";
 import { useChiefDetail, useChiefForemen, useChiefKpis, useChiefTrend } from "../api/hooks";
 import { useFilters } from "../hooks/useFilters";
 import { rowHoverClass, rowStyle, tdClass, thClass, theadRowStyle, thStyle } from "../lib/tableStyles";
@@ -60,6 +59,24 @@ export function GroupDetailPage() {
         <Card title="Fabrika İçi Sıralaması"><p className="text-xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{c.factory_rank ?? "-"} / {c.factory_total}</p></Card>
         <Card title="Göreve Başlama"><p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{c.hire_date}</p></Card>
         <Card title="Durum"><p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{c.is_active ? "Aktif" : "Pasif"}</p></Card>
+        <Card title="Telefon">
+          {c.phone_number ? (
+            <a href={`tel:${c.phone_number}`} className="text-sm font-medium hover:underline" style={{ color: "var(--text-primary)" }}>
+              {c.phone_number}
+            </a>
+          ) : (
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>—</p>
+          )}
+        </Card>
+        <Card title="E-posta">
+          {c.email ? (
+            <a href={`mailto:${c.email}`} className="truncate text-sm font-medium hover:underline" style={{ color: "var(--text-primary)" }}>
+              {c.email}
+            </a>
+          ) : (
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>—</p>
+          )}
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -80,7 +97,7 @@ export function GroupDetailPage() {
             <table className="w-full text-left text-[13px]">
               <thead>
                 <tr style={theadRowStyle}>
-                  {["Formen", "Sicil No", "Vardiya", "Toplam Puan", "Seviye", "Veri Güvenilirliği"].map((label) => (
+                  {["Formen", "Sicil No", "Toplam Puan", "Seviye", "Veri Güvenilirliği"].map((label) => (
                     <th key={label} className={thClass} style={thStyle}>{label}</th>
                   ))}
                 </tr>
@@ -95,7 +112,6 @@ export function GroupDetailPage() {
                   >
                     <td className={`${tdClass} font-medium`} style={{ color: "var(--text-primary)" }}>{f.full_name ?? "-"}</td>
                     <td className={tdClass} style={{ color: "var(--text-muted)" }}>{f.employee_number ?? "-"}</td>
-                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>{f.shift?.name ?? "-"}</td>
                     <td className={`${tdClass} font-medium tabular-nums`} style={{ color: "var(--text-primary)" }}>{f.total_score.toFixed(1)}</td>
                     <td className={tdClass}><PerformanceLevelBadge level={f.level} /></td>
                     <td className={tdClass}>
@@ -134,8 +150,6 @@ export function GroupDetailPage() {
           </div>
         )}
       </Card>
-
-      {chiefId && <RelatedActionPlans chiefId={chiefId} />}
     </div>
   );
 }

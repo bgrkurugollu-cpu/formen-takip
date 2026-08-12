@@ -30,7 +30,7 @@ _IN_PROGRESS_STATUSES = {
 
 
 class AnalysisInProgressError(Exception):
-    """Bu tespit için zaten devam eden bir analiz isteği var (çift tıklama koruması)."""
+    pass
 
 
 def _new_code() -> str:
@@ -41,9 +41,6 @@ _TOP_LEVEL_FIELD = "executive_summary"
 
 
 def _unwrap_llm_payload(raw: dict) -> dict:
-    """Bazı modeller, talimata rağmen cevabı `{"analysis": {...}}` / `{"result": {...}}` gibi
-    tek anahtarlı bir sarmalayıcı içine koyar. En üst seviye beklenen alanı taşımıyorsa ve tek
-    bir anahtarı varsa, o anahtarın altındaki sözlüğü dener (en fazla birkaç seviye)."""
     current = raw
     for _ in range(3):
         if not isinstance(current, dict) or _TOP_LEVEL_FIELD in current:
@@ -71,8 +68,6 @@ class _RunResult:
 
 
 def _attempt_single_context(anomaly: Anomaly, package: dict, user_message: str, use_llm: bool) -> tuple[dict, str]:
-    """Tek bir üretim denemesi: demo modda sabit üreticiyi, aksi halde gerçek LLM'i çağırır ve
-    sonucu şemaya karşı doğrular. Başarısızsa ilgili istisnayı olduğu gibi yükseltir."""
     if use_llm:
         raw = llm_service.call_llm(
             SYSTEM_PROMPT, user_message, json_schema=_ANALYSIS_RESULT_SCHEMA, schema_name="anomaly_analysis_result"
@@ -108,7 +103,7 @@ def _run_single_context(db: Session, anomaly: Anomaly) -> _RunResult:
             try:
                 result_payload, model_name = _attempt_single_context(anomaly, package, user_message, use_llm=False)
                 break
-            except Exception as demo_exc:  # pragma: no cover - demo generator is deterministic and schema-safe
+            except Exception as demo_exc:
                 error_message = "Demo analiz üretimi başarısız oldu."
                 logger.warning("Demo analiz üretimi başarısız (anomaly=%s): %s", anomaly.code, demo_exc)
                 break
@@ -168,10 +163,6 @@ def _run_tool_calling(db: Session, anomaly: Anomaly, analysis: AnomalyAnalysis) 
 
 
 def run_analysis(db: Session, anomaly: Anomaly, mode: AnalysisMode | str | None = None) -> AnomalyAnalysis:
-    """Bir tespit için yapay zekâ analizi çalıştırır (gerçek LLM ya da demo fallback; `single_context`
-    veya `tool_calling` modunda), sonucu şemaya karşı doğrular, `anomaly_analyses` tablosuna yeni
-    bir kayıt olarak yazar (önceki analizler silinmez) ve tespitin `analysis_status` alanını
-    günceller. `mode` verilmezse `LLM_ANALYSIS_MODE` ayarı kullanılır."""
     if anomaly.analysis_status in _IN_PROGRESS_STATUSES:
         raise AnalysisInProgressError("Bu tespit için analiz zaten devam ediyor.")
 

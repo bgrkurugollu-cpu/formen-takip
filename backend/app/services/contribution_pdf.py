@@ -22,10 +22,6 @@ def _escape(value: str | None) -> str:
 
 
 def render_contribution_pdf(work: dict) -> bytes:
-    """`work`, contributions.py::_to_dict() tarafından üretilen sözlük (öne çıkan kazanım ve
-    rozetler dahil) — bu fonksiyon yönetim toplantılarında gösterilebilecek tek sayfalık bir
-    başarı kartı PDF'i üretir. Düzenleme/silme gibi sistem butonları içermez.
-    """
     _register_pdf_fonts()
 
     styles = getSampleStyleSheet()

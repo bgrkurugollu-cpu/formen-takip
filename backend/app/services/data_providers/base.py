@@ -1,10 +1,3 @@
-"""LLM tool calling'in çağırdığı salt-okunur veri sağlayıcı arayüzleri. Bu aşamada tek
-implementasyon `synthetic.py` içindeki `Synthetic*Provider` sınıflarıdır; gelecekte
-`OceanKPIDataProvider`, `MLAnomalyDataProvider` gibi gerçek servislere bağlanan sınıflar aynı
-arayüzleri implemente ederek `__init__.py::get_data_providers()` üzerinden takılabilir —
-`app/services/tools/definitions.py`'deki araç fonksiyonları hangi implementasyonun altta
-çalıştığını bilmez, yalnızca bu soyut sözleşmeye güvenir (bkz. `app/services/providers/base.py`
-— PerformanceDataProvider ile aynı desen)."""
 
 from __future__ import annotations
 

@@ -9,6 +9,7 @@ export interface FilterState {
   chiefIds: string[];
   shiftIds: string[];
   kpiIds: string[];
+  foremanIds: string[];
 }
 
 function todayIso(): string {
@@ -21,6 +22,10 @@ function daysAgoIso(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function defaultDateRange(): [string, string] {
+  return [daysAgoIso(30), todayIso()];
+}
+
 const DEFAULTS: FilterState = {
   dateFrom: daysAgoIso(30),
   dateTo: todayIso(),
@@ -29,6 +34,7 @@ const DEFAULTS: FilterState = {
   chiefIds: [],
   shiftIds: [],
   kpiIds: [],
+  foremanIds: [],
 };
 
 function parseList(value: string | null): string[] {
@@ -47,6 +53,7 @@ export function useFilters() {
       chiefIds: parseList(searchParams.get("chief_ids")),
       shiftIds: parseList(searchParams.get("shift_ids")),
       kpiIds: parseList(searchParams.get("kpi_ids")),
+      foremanIds: parseList(searchParams.get("foreman_ids")),
     }),
     [searchParams]
   );
@@ -54,17 +61,22 @@ export function useFilters() {
   const setFilters = useCallback(
     (partial: Partial<FilterState>) => {
       const next = { ...filters, ...partial };
-      const params = new URLSearchParams();
+      const params = new URLSearchParams(searchParams);
+      const setOrDelete = (key: string, value: string) => {
+        if (value) params.set(key, value);
+        else params.delete(key);
+      };
       params.set("date_from", next.dateFrom);
       params.set("date_to", next.dateTo);
-      if (next.plantIds.length) params.set("plant_ids", next.plantIds.join(","));
-      if (next.factoryIds.length) params.set("factory_ids", next.factoryIds.join(","));
-      if (next.chiefIds.length) params.set("chief_ids", next.chiefIds.join(","));
-      if (next.shiftIds.length) params.set("shift_ids", next.shiftIds.join(","));
-      if (next.kpiIds.length) params.set("kpi_ids", next.kpiIds.join(","));
+      setOrDelete("plant_ids", next.plantIds.join(","));
+      setOrDelete("factory_ids", next.factoryIds.join(","));
+      setOrDelete("chief_ids", next.chiefIds.join(","));
+      setOrDelete("shift_ids", next.shiftIds.join(","));
+      setOrDelete("kpi_ids", next.kpiIds.join(","));
+      setOrDelete("foreman_ids", next.foremanIds.join(","));
       setSearchParams(params, { replace: true });
     },
-    [filters, setSearchParams]
+    [filters, searchParams, setSearchParams]
   );
 
   const clearFilters = useCallback(() => {
@@ -80,6 +92,7 @@ export function useFilters() {
       chief_ids: filters.chiefIds.join(",") || undefined,
       shift_ids: filters.shiftIds.join(",") || undefined,
       kpi_ids: filters.kpiIds.join(",") || undefined,
+      foreman_ids: filters.foremanIds.join(",") || undefined,
     }),
     [filters]
   );

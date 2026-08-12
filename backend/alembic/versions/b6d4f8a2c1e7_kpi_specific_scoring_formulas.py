@@ -1,12 +1,3 @@
-"""KPI-specific scoring formulas: consolidate Inkita, add v2 calculation rules.
-
-Data-only migration implementing the KPI-specific scoring model:
-- Closes PLANLI_INKITA/PLANSIZ_INKITA (superseded by a single INKITA KPI = technical + manufacturing,
-  "Diger" downtime tracked but excluded from scoring per spec section 3.4/7).
-- Adds v2 calculation rules (custom_formula + coefficients) for AGIR_GITME/GSF/ISKARTA/PLANA_UYUM,
-  closing their v1 generic-ratio rules. Old rule/KPI rows are closed (is_active=False, valid_to), never
-  deleted, so historical scores stay traceable to the rule version that produced them.
-"""
 import json
 import uuid
 from datetime import date
@@ -59,18 +50,10 @@ _INKITA_RULE_PARAMS = {
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # Bu migration bir RETROFIT'tir: PLANLI_INKITA/PLANSIZ_INKITA'yı zaten içeren, önceden
-    # seed edilmiş bir veritabanını yeni formüllere taşımak içindir. Boş (henüz hiç seed
-    # edilmemiş) bir veritabanında `kpis` tablosu boştur — bu durumda hiçbir şey yapmaya gerek
-    # yok, çünkü `seed_reference_data` (app/services/synthetic/reference_data.py) zaten
-    # DEFAULT_KPI_SEED üzerinden INKITA'yı doğrudan doğru formülle oluşturur. Koşulsuz INSERT
-    # burada çalışsaydı, seed komutu aynı 'INKITA' kodunu tekrar eklemeye çalışıp
-    # ix_kpis_code'da UniqueViolation alırdı.
     existing_kpi_count = bind.execute(sa.text("SELECT count(*) FROM kpis")).scalar()
     if not existing_kpi_count:
         return
 
-    # --- 1) Close PLANLI_INKITA / PLANSIZ_INKITA (kpi + active rule) ---------------------------
     bind.execute(sa.text(
         """
         UPDATE kpi_calculation_rules
@@ -87,7 +70,6 @@ def upgrade() -> None:
         """
     ), {"today": _TODAY})
 
-    # --- 2) Insert consolidated INKITA kpi + v1 rule --------------------------------------------
     inkita_kpi_id = str(uuid.uuid4())
     bind.execute(sa.text(
         """
@@ -120,7 +102,6 @@ def upgrade() -> None:
         """
     ), {"id": inkita_rule_id, "kpi_id": inkita_kpi_id, "params": json.dumps(_INKITA_RULE_PARAMS), "valid_from": _TODAY})
 
-    # COMPANY target: sum of the two retired KPIs' default targets (4.0 + 6.0).
     bind.execute(sa.text(
         """
         INSERT INTO kpi_targets (id, kpi_id, scope_type, scope_id, target_value, valid_from, valid_to, is_active, created_at, updated_at)
@@ -128,8 +109,6 @@ def upgrade() -> None:
         """
     ), {"id": str(uuid.uuid4()), "kpi_id": inkita_kpi_id, "valid_from": _TODAY})
 
-    # PLANT targets: derived from the sum of each plant's existing PLANLI_INKITA + PLANSIZ_INKITA targets,
-    # so the consolidated KPI keeps the same effective per-plant threshold instead of reverting to a flat default.
     bind.execute(sa.text(
         """
         INSERT INTO kpi_targets (id, kpi_id, scope_type, scope_id, target_value, valid_from, valid_to, is_active, created_at, updated_at)
@@ -146,7 +125,6 @@ def upgrade() -> None:
         """
     ), {"kpi_id": inkita_kpi_id, "valid_from": _TODAY})
 
-    # --- 3) Close v1 rules and add v2 (custom_formula) rules for the other four KPIs ------------
     for code, params in _V2_RULE_PARAMS.items():
         bind.execute(sa.text(
             """
@@ -173,11 +151,8 @@ def upgrade() -> None:
             """
         ), {"params": json.dumps(params), "valid_from": _TODAY, "code": code})
 
-    # AGIR_GITME can now be a signed value (underweight = negative) — the old min_valid_value=0 would
-    # flag every underweight (negative) measurement as INVALID data quality.
     bind.execute(sa.text("UPDATE kpis SET min_valid_value = -100, updated_at = now() WHERE code = 'AGIR_GITME'"))
 
-    # Renumber display order now that Inkita is a single card (was 1,2,3,4,5,6 -> now 1,2,3,4,5).
     bind.execute(sa.text("UPDATE kpis SET display_order = 5, updated_at = now() WHERE code = 'PLANA_UYUM'"))
 
 

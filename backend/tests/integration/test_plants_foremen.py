@@ -1,5 +1,27 @@
 import uuid
 
+from sqlalchemy import select
+
+from app.models.foreman import Chief, Foreman
+
+
+class TestContactInfoDataQuality:
+    def test_every_foreman_has_phone_and_unique_email(self, db_session):
+        foremen = list(db_session.scalars(select(Foreman)))
+        assert foremen
+        emails = [f.email for f in foremen]
+        assert all(f.phone_number for f in foremen)
+        assert all(emails)
+        assert len(emails) == len(set(emails))
+
+    def test_every_chief_has_phone_and_unique_email(self, db_session):
+        chiefs = list(db_session.scalars(select(Chief)))
+        assert chiefs
+        emails = [c.email for c in chiefs]
+        assert all(c.phone_number for c in chiefs)
+        assert all(emails)
+        assert len(emails) == len(set(emails))
+
 
 class TestPlantsEndpoints:
     def test_list_plants_paginated(self, client, auth_headers):
@@ -45,7 +67,10 @@ class TestForemenEndpoints:
 
         detail = client.get(f"/api/v1/foremen/{foreman_id}", headers=auth_headers)
         assert detail.status_code == 200
-        assert detail.json()["id"] == foreman_id
+        body = detail.json()
+        assert body["id"] == foreman_id
+        assert body["phone_number"].startswith("+90")
+        assert "@" in body["email"]
 
         kpis = client.get(f"/api/v1/foremen/{foreman_id}/kpis", headers=auth_headers)
         assert kpis.status_code == 200

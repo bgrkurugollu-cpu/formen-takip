@@ -1,9 +1,6 @@
-from app.models.action_plan import ActionPlan
 from app.models.anomaly import Anomaly, AnomalyAnalysis, AnomalyToolCall
 from app.models.contribution import ContributionGain, ContributionWork, ContributionWorkForeman
 from app.models.enums import (
-    ActionPlanPriority,
-    ActionPlanStatus,
     AggregationMethod,
     AnalysisMode,
     AnomalyAnalysisStatus,
@@ -31,6 +28,7 @@ from app.models.enums import (
     VerifyingDepartment,
 )
 from app.models.foreman import Chief, Foreman, ForemanAssignment
+from app.models.foreman_report import ForemanMonthlyReport
 from app.models.integration import DataQualityIssue, IntegrationRun
 from app.models.kpi import Kpi, KpiCalculationRule, KpiTarget, PerformanceLevelRule
 from app.models.organization import Factory, Plant, Shift
@@ -46,9 +44,6 @@ from app.models.report import ReportExport
 from app.models.user import AuditLog, User
 
 __all__ = [
-    "ActionPlan",
-    "ActionPlanPriority",
-    "ActionPlanStatus",
     "AggregationMethod",
     "CalculationType",
     "DataQualityStatus",
@@ -61,6 +56,7 @@ __all__ = [
     "Chief",
     "Foreman",
     "ForemanAssignment",
+    "ForemanMonthlyReport",
     "DataQualityIssue",
     "IntegrationRun",
     "Kpi",

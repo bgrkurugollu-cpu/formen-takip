@@ -10,9 +10,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Bir tesisin bir vardiyasından aynı anda yalnızca bir formen sorumlu olabilir — formen
-    # birden fazla tesise (concurrent ForemanAssignment satırları) bağlı olsa da bu artık
-    # DB seviyesinde garanti edilir (bkz. reference_data.py seed_reference_data).
     op.create_index(
         'uq_foreman_assignments_plant_shift_active',
         'foreman_assignments',

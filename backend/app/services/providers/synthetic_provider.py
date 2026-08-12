@@ -13,11 +13,6 @@ from app.services.providers.base import PerformanceDataProvider, RawPerformanceR
 
 
 class SyntheticDataProvider(PerformanceDataProvider):
-    """`production_records` (sentetik üretici tarafından doldurulmuş) tablosundan KPI
-    kayıtlarını türetir. Üretim tek seferlik `seed` komutu sırasında yapılmıştır — bu
-    sınıf gerçek bir SAP sağlayıcısı gibi yalnızca veritabanını okur, rastgele değer
-    üretmez. `duplicate_rate`, kaynaktan aynı üretim olayının iki kez gönderilmesi
-    senaryosunu simüle etmek için kullanılır (idempotency testleri için)."""
 
     source_system = SourceSystem.SYNTHETIC
 

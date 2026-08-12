@@ -19,10 +19,6 @@ BATCH_SIZE = 2000
 
 
 def recalculate_agir_gitme_actuals(db: Session, batch_size: int = BATCH_SIZE) -> dict:
-    """AGIR_GITME `performance_records`'ın actual/numerator/denominator'ını yeni (bant bazlı,
-    işaretli) türetimle yeniden hesaplar — bu bir düzeltmedir (yeni formülle yeniden hesaplama),
-    yeni bir olgu değildir, bu yüzden aynı satır kimliği korunarak UPDATE yapılır (spec: geçmiş
-    kayıtlar silinmez, izlenebilir kalır)."""
     agir_gitme = db.scalar(select(Kpi).where(Kpi.code == "AGIR_GITME"))
     if agir_gitme is None:
         return {"updated": 0, "skipped": 0}
@@ -88,9 +84,6 @@ def recalculate_agir_gitme_actuals(db: Session, batch_size: int = BATCH_SIZE) ->
 
 
 class _InkitaOnlyProvider(PerformanceDataProvider):
-    """`run_ingestion`'ı yalnızca INKITA satırlarıyla besler — aksi halde zaten var olan diğer dört
-    KPI'nın kayıtları aynı `source_record_id` ile yeniden üretilip `uq_perf_record_source`
-    çakışmasına (ON CONFLICT'in kapsamadığı bir constraint) düşerdi."""
 
     source_system = SourceSystem.SYNTHETIC
 
@@ -104,9 +97,6 @@ class _InkitaOnlyProvider(PerformanceDataProvider):
 
 
 def ingest_inkita_backfill(db: Session) -> dict:
-    """Yeni tekilleştirilmiş İnkita KPI'sı için, mevcut `production_records`'ın tüm tarih
-    aralığında yeni performance_records/scores üretir (yeni KPI olduğu için doğal anahtar
-    çakışması yok — eski PLANLI_INKITA/PLANSIZ_INKITA kayıtları dokunulmadan, arşiv olarak kalır)."""
     date_from = db.scalar(select(ProductionRecord.production_date).order_by(ProductionRecord.production_date.asc()))
     date_to = db.scalar(select(ProductionRecord.production_date).order_by(ProductionRecord.production_date.desc()))
     if date_from is None or date_to is None:
@@ -121,9 +111,6 @@ def ingest_inkita_backfill(db: Session) -> dict:
 
 
 def rescore_all(db: Session, batch_size: int = BATCH_SIZE) -> dict:
-    """Aktif kural her ne olursa olsun (generic veya CUSTOM_FORMULA) tüm `performance_scores`'u
-    yeniden hesaplar — `compute_score_for_rule` ingestion.py ile birebir aynı fonksiyon (spec rule
-    17). Retire edilmiş KPI'ların (is_active=False) skorlarına dokunulmaz."""
     kpis_by_id = {k.id: k for k in db.scalars(select(Kpi).where(Kpi.is_active.is_(True)))}
     rules_by_kpi_id = {
         r.kpi_id: r for r in db.scalars(select(KpiCalculationRule).where(KpiCalculationRule.is_active.is_(True)))
@@ -166,7 +153,7 @@ def rescore_all(db: Session, batch_size: int = BATCH_SIZE) -> dict:
                 calculated_at=bindparam("calculated_at"),
             )
         )
-        db.execute(upd, batch)
+        db.connection().execute(upd, batch)
         db.commit()
         updated += len(batch)
         batch = []
@@ -181,7 +168,8 @@ def rescore_all(db: Session, batch_size: int = BATCH_SIZE) -> dict:
             score = compute_score_for_rule(
                 rule.calculation_type, rule.parameters,
                 actual=float(row.actual_value), target=float(row.target_value),
-                numerator=row.numerator_value, denominator=row.denominator_value,
+                numerator=float(row.numerator_value) if row.numerator_value is not None else None,
+                denominator=float(row.denominator_value) if row.denominator_value is not None else None,
                 min_score=float(kpi.min_score), max_score=float(kpi.max_score),
             )
         except KpiCalculationError:
@@ -200,8 +188,6 @@ def rescore_all(db: Session, batch_size: int = BATCH_SIZE) -> dict:
 
 
 def apply_scoring_model_v2(db: Session) -> dict:
-    """Üç adımı sırayla çalıştırır — bkz. her fonksiyonun docstring'i. Her adım kaynaktan yeniden
-    hesapladığı için tekrar çalıştırmak güvenlidir (idempotent)."""
     agir_gitme_result = recalculate_agir_gitme_actuals(db)
     inkita_result = ingest_inkita_backfill(db)
     rescore_result = rescore_all(db)

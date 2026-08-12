@@ -9,7 +9,7 @@ import { useForemen } from "../api/hooks";
 import { useFilters } from "../hooks/useFilters";
 import { rowHoverClass, rowStyle, searchInputClass, searchInputStyle, tdClass, thClass, theadRowStyle, thStyle } from "../lib/tableStyles";
 
-type SortField = "name" | "employee_number" | "plant" | "chief" | "shift" | "score" | "level" | "reliability";
+type SortField = "name" | "employee_number" | "plant" | "chief" | "score" | "level" | "reliability";
 
 const DESC_FIRST: ReadonlySet<SortField> = new Set(["score", "level", "reliability"]);
 
@@ -18,7 +18,6 @@ const COLUMNS: { field: SortField; label: string }[] = [
   { field: "employee_number", label: "Sicil No" },
   { field: "plant", label: "Tesis" },
   { field: "chief", label: "Şef" },
-  { field: "shift", label: "Vardiya" },
   { field: "score", label: "Toplam Puan" },
   { field: "level", label: "Seviye" },
   { field: "reliability", label: "Veri Güvenilirliği" },
@@ -116,7 +115,6 @@ export function ForemenPage() {
                     <td className={tdClass} style={{ color: "var(--text-secondary)" }}>
                       {f.assignments[0]?.chief.name ?? "-"}
                     </td>
-                    <td className={tdClass} style={{ color: "var(--text-secondary)" }}>{f.shift?.name ?? "-"}</td>
                     <td className={`${tdClass} font-medium tabular-nums`} style={{ color: "var(--text-primary)" }}>{f.total_score.toFixed(1)}</td>
                     <td className={tdClass}>
                       <PerformanceLevelBadge level={f.level} />

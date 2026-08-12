@@ -24,9 +24,6 @@ def _cleanup_contribution_works(db_session):
 
 def _sample_plant_and_foreman(db_session):
     plant = db_session.scalars(select(Plant).order_by(Plant.sequence_number)).first()
-    # Sentetik seed verisi az sayıdaki formene rastgele katkı çalışmaları atayabildiğinden
-    # (bkz. contribution_generator.py), testin "sıfırdan başlar" varsayımını bozmamak için
-    # halihazırda yayımlanmış bir çalışması olan formenler eleniyor.
     has_published_work = select(ContributionWorkForeman.foreman_id).join(
         ContributionWork, ContributionWork.id == ContributionWorkForeman.work_id
     ).where(ContributionWork.status == ContributionStatus.PUBLISHED)
@@ -70,6 +67,41 @@ class TestContributionWorkList:
         assert resp.status_code == 200
         body = resp.json()
         assert "items" in body and "total" in body
+
+    def test_sql_sortable_pages_do_not_overlap(self, client, auth_headers):
+        created_ids = set()
+        for i in range(8):
+            resp = client.post(
+                "/api/v1/contribution-works", json={"title": f"Sayfalama testi #{i}"}, headers=auth_headers
+            )
+            created_ids.add(resp.json()["id"])
+
+        first = client.get(
+            "/api/v1/contribution-works", params={"sort_by": "date", "page": 1, "page_size": 4}, headers=auth_headers
+        ).json()
+        second = client.get(
+            "/api/v1/contribution-works", params={"sort_by": "date", "page": 2, "page_size": 4}, headers=auth_headers
+        ).json()
+        first_ids = {i["id"] for i in first["items"]}
+        second_ids = {i["id"] for i in second["items"]}
+        assert first_ids.isdisjoint(second_ids)
+
+        all_items = client.get(
+            "/api/v1/contribution-works", params={"search": "Sayfalama testi", "page_size": 200}, headers=auth_headers
+        ).json()
+        assert created_ids == {i["id"] for i in all_items["items"]}
+
+    def test_title_sort_still_works_via_python_path(self, client, auth_headers):
+        client.post("/api/v1/contribution-works", json={"title": "Öncelik Testi Z"}, headers=auth_headers)
+        client.post("/api/v1/contribution-works", json={"title": "Öncelik Testi A"}, headers=auth_headers)
+        resp = client.get(
+            "/api/v1/contribution-works",
+            params={"search": "Öncelik Testi", "sort_by": "title", "sort_dir": "asc", "page_size": 10},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        titles = [i["title"] for i in resp.json()["items"]]
+        assert titles == sorted(titles)
 
 
 class TestContributionWorkCreate:
@@ -234,16 +266,13 @@ class TestForemanContributionSummary:
         ).first()
         assert second is not None
 
-        # Yayımlanmış, tek formenli çalışma: tahmini kazancın tamamı bu formene ait sayılmalı.
         client.post("/api/v1/contribution-works", json=_full_payload(plant, foreman), headers=auth_headers)
 
-        # Yayımlanmış, iki formenli çalışma: kazanç ve zaman tasarrufu eşit paylaşılmalı.
         shared_payload = _full_payload(plant, foreman)
         shared_payload["title"] = "Ortak SMED Çalışması"
         shared_payload["foreman_ids"] = [str(foreman.id), str(second.id)]
         client.post("/api/v1/contribution-works", json=shared_payload, headers=auth_headers)
 
-        # Taslak çalışma: özet toplamlarına dahil edilmemeli.
         client.post(
             "/api/v1/contribution-works",
             json={"title": "Taslak - sayılmamalı", "foreman_ids": [str(foreman.id)]},
@@ -257,9 +286,7 @@ class TestForemanContributionSummary:
         assert body["smed_count"] == 2
         assert body["led_contributions"] == 1
         assert body["verified_financial_gain"] == {}
-        # 250000 (tek başına, tam pay) + 250000/2 (paylaşılan) = 375000
         assert body["estimated_financial_gain"]["TRY"] == pytest.approx(375000, rel=0.001)
-        # 510 (tek başına, tam pay) + 510/2 (paylaşılan) = 765
         assert body["total_time_saving_minutes"] == pytest.approx(765, rel=0.001)
         assert body["last_contribution_date"] == "2026-01-15"
 

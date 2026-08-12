@@ -28,7 +28,6 @@ await page.waitForTimeout(300);
 await page.mouse.click(10, 600);
 await page.waitForTimeout(2000);
 
-// Vardiya sütununa göre sırala (artan + azalan) — her iki uçta da kayma olmamalı
 const shiftHeader = page.locator('thead button:has-text("Vardiya")');
 
 for (const dir of ["artan", "azalan"]) {

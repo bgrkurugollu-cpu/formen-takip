@@ -17,6 +17,7 @@ from app.models.user import User
 from app.schemas.common import PageParams, page_params
 from app.services.anomaly_analysis_service import AnalysisInProgressError, run_analysis
 from app.services.anomaly_context import build_analysis_package
+from app.services.anomaly_investigation import build_investigation
 from app.services.anomaly_kpi_defs import (
     ANALYSIS_STATUS_LABELS,
     ANOMALY_TYPE_LABELS,
@@ -208,14 +209,17 @@ def list_anomalies(
         like = f"%{search}%"
         query = query.where(or_(Anomaly.title.ilike(like), Anomaly.description.ilike(like)))
 
-    all_anomalies = list(db.scalars(query.order_by(Anomaly.detected_at.desc())))
-    total = len(all_anomalies)
-    start = (page.page - 1) * page.page_size
-    page_items = all_anomalies[start : start + page.page_size]
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+
+    query = (
+        query.order_by(Anomaly.detected_at.desc(), Anomaly.id)
+        .offset((page.page - 1) * page.page_size).limit(page.page_size)
+    )
+    page_items = list(db.scalars(query))
 
     return {
         "items": [_to_summary_dict(db, a) for a in page_items],
-        "total": total,
+        "total": total or 0,
         "page": page.page,
         "page_size": page.page_size,
     }
@@ -248,6 +252,14 @@ def get_anomaly(anomaly_id: UUID, db: Session = Depends(get_db), _=Depends(get_c
     if anomaly is None:
         raise HTTPException(404, "Tespit bulunamadı.")
     return _to_detail_dict(db, anomaly)
+
+
+@router.get("/{anomaly_id}/investigation")
+def get_anomaly_investigation(anomaly_id: UUID, db: Session = Depends(get_db), _=Depends(get_current_user)) -> dict:
+    anomaly = db.get(Anomaly, anomaly_id)
+    if anomaly is None:
+        raise HTTPException(404, "Tespit bulunamadı.")
+    return build_investigation(db, anomaly)
 
 
 @router.get("/{anomaly_id}/analysis")

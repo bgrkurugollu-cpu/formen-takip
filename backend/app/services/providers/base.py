@@ -26,9 +26,6 @@ class RawPerformanceRecord:
     numerator_value: float | None = None
     denominator_value: float | None = None
     source_updated_at: datetime | None = None
-    # Bu KPI değerinin türetildiği ham üretim kaydı (izlenebilirlik). Üretim verisi
-    # katmanından türetilmeyen sağlayıcılar (ör. doğrudan KPI-seviyeli veri gönderen
-    # bir kaynak) bunu boş bırakabilir.
     production_record_id: uuid.UUID | None = None
 
 

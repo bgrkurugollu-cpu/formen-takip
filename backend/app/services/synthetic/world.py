@@ -1,20 +1,3 @@
-"""Belirleyici (deterministic) sentetik "dijital ikiz" veri katmanı — tool calling sisteminin
-okuduğu tüm sayısal/olay verisinin tek kaynağı.
-
-Tasarım ilkesi: hiçbir araç kendi başına rastgele/bağımsız veri üretmez. Bunun yerine her araç,
-burada tanımlanan birkaç temel fonksiyonun (özellikle `_value_for_date`) türevini döndürür — bu
-yüzden `get_kpi_history(shift=2)` ile `compare_shifts()`'in 2. vardiya ortalaması HER ZAMAN
-birbiriyle tutarlıdır (aynı sayılardan hesaplanırlar).
-
-"Zemin gerçeği" (ground truth), `anomaly_generator.py` tarafından üretilip `anomalies` tablosuna
-yazılmış olan gerçek kayıtlardır ("anchor"). Bir (tesis, KPI) çifti için DB'de bir tespit varsa,
-o tespitin `observed_value`/`expected_value`/`comparison`/`period` alanları buradaki tüm sentetik
-detayların (günlük seri, duruş, bakım, vb.) çıkış noktasıdır. Tespit yoksa ("temiz" tesis/KPI
-kombinasyonu), KPI'nın genel hedefine yakın, düşük varyanslı "sağlıklı" bir seri üretilir. Bu,
-Ocean/gerçek ML entegrasyonuna geçildiğinde bu modülün tamamen bir `OceanKPIDataProvider` ile
-değiştirilebilmesini sağlayacak şekilde diğer katmanlardan izole tutulmuştur — hiçbir tool, bu
-modülün "sentetik" olduğunu bilmez.
-"""
 
 from __future__ import annotations
 
@@ -34,18 +17,13 @@ from app.services.anomaly_kpi_defs import ANOMALY_TYPE_LABELS, KPI_DEFINITIONS
 
 
 class WorldLookupError(Exception):
-    """Fabrika/tesis/vardiya/KPI/tespit kimliği çözülemedi — çağıran taraf (tools) bunu
-    kullanıcıya/LLM'e döndürülecek bir doğrulama hatasına çevirir."""
+    pass
 
 
 def _rng(*parts: object) -> random.Random:
     return random.Random("|".join(str(p) for p in parts))
 
 
-# --------------------------------------------------------------------------------------
-# Kimlik çözümleme — LLM'in gönderdiği serbest biçimli parametreleri (UUID, kod veya isim)
-# gerçek kayıtlara bağlar. Tool şema doğrulaması bunları "geçersiz" hatasına çevirir.
-# --------------------------------------------------------------------------------------
 
 def resolve_factory(db: Session, value: str) -> Factory:
     value = (value or "").strip()
@@ -89,7 +67,7 @@ def resolve_shift(db: Session, value: str | int | None) -> Shift | None:
     if shift is None:
         shift = db.scalar(select(Shift).where(Shift.name.ilike(f"%{text}%")))
     if shift is None:
-        raise WorldLookupError(f"Vardiya bulunamadı: {value!r} (geçerli: V1, V2, V3 veya 1-3)")
+        raise WorldLookupError(f"Vardiya bulunamadı: {value!r} (geçerli: V1, V2 veya 1-2)")
     return shift
 
 
@@ -122,13 +100,8 @@ def resolve_anomaly(db: Session, value: str) -> Anomaly:
     return anomaly
 
 
-# --------------------------------------------------------------------------------------
-# Zemin gerçeği (anchor) ve temel değer serisi
-# --------------------------------------------------------------------------------------
 
 def find_anchor(db: Session, plant_id: UUID, kpi_id: UUID) -> Anomaly | None:
-    """Bu tesis+KPI çifti için (varsa) en güncel sentetik tespiti döndürür — sentetik
-    "dünyanın" bu kombinasyon için zemin gerçeğidir."""
     return db.scalar(
         select(Anomaly)
         .where(Anomaly.plant_id == plant_id, Anomaly.kpi_id == kpi_id)
@@ -137,7 +110,6 @@ def find_anchor(db: Session, plant_id: UUID, kpi_id: UUID) -> Anomaly | None:
 
 
 def generic_baseline(kpi: Kpi) -> float:
-    """Bu tesiste/KPI'da hiç tespit yoksa kullanılacak "sağlıklı" referans değer."""
     d = KPI_DEFINITIONS.get(kpi.code, {})
     warning = d.get("warning_threshold", 90.0 if kpi.success_direction_higher else 8.0)
     if kpi.success_direction_higher:
@@ -146,10 +118,6 @@ def generic_baseline(kpi: Kpi) -> float:
 
 
 def _value_for_date(db: Session, plant: Plant, kpi: Kpi, shift: Shift | None, d: date) -> float:
-    """Tüm üst seviye araçların türetildiği tek temel fonksiyon: bir tesiste, bir KPI için,
-    belirli bir güne ait değeri döndürür. `shift=None` (tesis geneli) istendiğinde, tek bir
-    vardiyanın eğrisini tekrarlamak yerine gerçek vardiya değerlerinin ortalaması alınır —
-    böylece tek bir kötü vardiya, tesis ortalamasını olduğundan fazla düşürmez."""
     if shift is None:
         shifts = list(db.scalars(select(Shift).where(Shift.is_active.is_(True))))
         if shifts:
@@ -168,19 +136,16 @@ def _value_for_date(db: Session, plant: Plant, kpi: Kpi, shift: Shift | None, d:
     is_flagged_line = shift is None or flagged_shift_id is None or shift.id == flagged_shift_id
 
     if not is_flagged_line:
-        # Farklı bir vardiya istendi: tespit anındaki karşılaştırma tablosundaki o vardiyanın
-        # kayıtlı ortalamasının etrafında dalgalan (compare_shifts ile aynı sayıyı üretir).
         recorded = anchor.comparison.get(f"{shift.code.lower()}_average") if shift else None
         center = float(recorded) if recorded is not None else expected
         return round(center + noise, 2)
 
     if anchor.period_start <= d <= anchor.period_end:
         total_days = max((anchor.period_end - anchor.period_start).days, 1)
-        progress = (d - anchor.period_start).days / total_days  # 0 (dönem başı) -> 1 (tespit anı)
+        progress = (d - anchor.period_start).days / total_days
         value = expected + (observed - expected) * (0.35 + 0.65 * progress)
         return round(value + noise * 0.6, 2)
 
-    # Dönem dışı: sorun henüz başlamamış veya (varsayımsal olarak) çözülmüş — beklenen değere yakın.
     return round(expected + noise, 2)
 
 
@@ -321,7 +286,6 @@ _DOWNTIME_CATEGORIES = [
 
 
 def _trouble_score(db: Session, plant: Plant, kpi: Kpi) -> float:
-    """0 (sorun yok) - 1 (kritik) arası; tespit varsa şiddetine göre, yoksa 0'a yakın."""
     anchor = find_anchor(db, plant.id, kpi.id)
     if anchor is None:
         return 0.05
@@ -449,7 +413,7 @@ def changeover_records(db: Session, plant: Plant, shift: Shift | None, start: da
             {
                 "date": d.isoformat(), "previous_product": prev_p, "new_product": new_p,
                 "target_minutes": target, "actual_minutes": actual, "deviation_minutes": round(actual - target, 1),
-                "shift": shift.name if shift else rng.choice(["1. Vardiya", "2. Vardiya", "3. Vardiya"]),
+                "shift": shift.name if shift else rng.choice(["1. Vardiya", "2. Vardiya"]),
                 "description": "Standart ürün değişimi." if actual <= target * 1.15 else "Hedeften belirgin sapma gözlendi.",
             }
         )
@@ -489,7 +453,6 @@ def shift_notes(db: Session, plant: Plant, shift: Shift | None, kpi: Kpi | None,
 
 
 _ROOT_CAUSE_POOL: dict[str, list[tuple[str, str, str]]] = {
-    # (kök neden, uygulanan aksiyon, sonuç)
     "downtime_concentration": [
         ("Tekrarlayan mekanik arıza", "Arızalı parça değiştirildi, önleyici bakım planına eklendi", "Duruş süresi %60 azaldı"),
     ],
@@ -538,7 +501,7 @@ def similar_historical_cases(db: Session, exclude_anomaly_id: UUID, kpi: Kpi | N
         resolved = c.status.value in ("resolved", "closed")
         results.append(
             {
-                "anomaly_code": c.code, "title": c.title,
+                "anomaly_id": str(c.id), "anomaly_code": c.code, "title": c.title,
                 "plant_name": c_plant.name if c_plant else None, "kpi_name": c_kpi.name if c_kpi else None,
                 "anomaly_type_label": ANOMALY_TYPE_LABELS.get(c.anomaly_type, c.anomaly_type.value),
                 "similarity_reason": f"Benzerlik skoru: {score} (KPI/tür/tesis eşleşmesi)",

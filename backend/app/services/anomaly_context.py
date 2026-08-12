@@ -104,12 +104,6 @@ def _similar_historical_cases(anomaly: Anomaly, rng: random.Random) -> list[dict
 
 
 def build_analysis_package(db: Session, anomaly: Anomaly) -> dict:
-    """LLM'ye gönderilecek tek JSON paketini oluşturur (single_context modu).
-
-    Bu modda RAG veya tool calling kullanılmaz — LLM'nin ihtiyaç duyacağı bağlamın tamamı
-    burada tek seferde toplanır. Sentetik bağlam öğeleri (duruş, bakım, ürün dağılımı, vardiya
-    notları, geçmiş benzer olaylar), tespitin `code` alanından türetilen sabit bir rng ile
-    üretilir — böylece aynı tespit için her çağrıda aynı bağlam elde edilir."""
     rng = random.Random(f"anomaly-context:{anomaly.code}")
 
     plant = db.get(Plant, anomaly.plant_id)

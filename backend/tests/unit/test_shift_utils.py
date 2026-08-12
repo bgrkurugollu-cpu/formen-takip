@@ -10,7 +10,7 @@ class TestShiftCrossesMidnight:
     def test_day_shift_does_not_cross(self):
         assert shift_crosses_midnight(time(8, 0), time(16, 0)) is False
 
-    def test_shift_ending_exactly_at_midnight_does_not_cross(self):
+    def test_shift_ending_exactly_at_midnight_crosses(self):
         assert shift_crosses_midnight(time(16, 0), time(0, 0)) is True
 
 

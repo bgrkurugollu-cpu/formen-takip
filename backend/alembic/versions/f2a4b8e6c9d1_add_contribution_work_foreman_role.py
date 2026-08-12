@@ -21,7 +21,6 @@ def upgrade() -> None:
     )
     op.alter_column('contribution_work_foremen', 'role', server_default=None)
 
-    # Tek formenli mevcut çalışmalarda o formen tek başına sorumlu olduğundan LEAD sayılır.
     op.execute(
         """
         UPDATE contribution_work_foremen cwf

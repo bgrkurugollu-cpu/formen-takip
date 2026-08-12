@@ -14,10 +14,6 @@ RiskLevel = Literal["low", "medium", "high", "critical"]
 
 
 class SourceRef(BaseModel):
-    """Bir bulgunun/nedenin hangi tool çağrısından geldiğini gösterir (yalnızca tool_calling
-    modunda doldurulur). Backend, bu referansların gerçekten yapılmış tool çağrılarına ait
-    olduğunu doğrular — LLM'nin uydurduğu tool_call_id'ler kabul edilmez
-    (bkz. anomaly_orchestrator.py::_sanitize_source_refs)."""
 
     tool_call_id: str
     tool_name: str
@@ -75,16 +71,6 @@ class DataScope(BaseModel):
 
 
 class AnalysisResult(BaseModel):
-    """LLM'den (veya demo modda sabit üreticiden) beklenen yapılandırılmış çıktı şeması.
-
-    Backend, hem gerçek LLM cevabını hem de demo fallback cevabını bu şemadan geçirerek
-    doğrular — geçersiz JSON veya eksik alan durumunda ValidationError fırlatılır ve
-    çağıran servis (bkz. anomaly_analysis_service.py) bunu kontrollü bir hataya çevirir.
-
-    `tools_used`, `data_scope`, `analysis_limitations` yalnızca `tool_calling` modunda
-    doldurulur; `single_context` modunda (tool kullanılmadığında) boş/None bırakılabilir — bu
-    yüzden hepsi varsayılan değerlidir ve Pydantic doğrulamasında zorunlu değildir (yalnızca
-    LLM'e gönderilen strict JSON şemasında, OpenAI'ın kısıtı gereği tüm alanlar zorunlu görünür)."""
 
     executive_summary: str
     verified_findings: list[VerifiedFinding] = Field(default_factory=list)

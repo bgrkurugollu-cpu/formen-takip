@@ -29,7 +29,6 @@ router = APIRouter(prefix="/contribution-works", tags=["contribution-works"])
 
 
 def _num(value) -> float | None:
-    """Postgres `Numeric` kolonlarından gelen `Decimal` değerleri JSON yanıtı için float'a çevirir."""
     return float(value) if value is not None else None
 
 WORK_TYPE_LABELS = {
@@ -179,8 +178,6 @@ def _publish_check_data(work: ContributionWork, foreman_ids: list[UUID]) -> dict
 
 
 def _apply_derived_fields(work: ContributionWork, overridden_fields: set[str]) -> None:
-    """Süre kazancı alanlarını yeniden hesaplar; kullanıcı bu istekte açıkça bir değer
-    göndermişse (manuel düzeltme) o alana dokunmaz."""
     if "per_occurrence_saving" not in overridden_fields:
         work.per_occurrence_saving = calc.compute_time_saving(work.previous_duration, work.new_duration)
     if "monthly_total_saving_minutes" not in overridden_fields:
@@ -195,8 +192,6 @@ def _sync_foremen(db: Session, work_id: UUID, foreman_ids: list[UUID] | None) ->
         return
     db.execute(delete(ContributionWorkForeman).where(ContributionWorkForeman.work_id == work_id))
     unique_ids = list(dict.fromkeys(foreman_ids))
-    # Tek formenli çalışmada o formen tek başına sorumlu olduğundan LEAD sayılır; ortak
-    # çalışmalarda rol ataması şimdilik formdan alınmadığından tümü CONTRIBUTOR kalır.
     solo_role = ContributionRole.LEAD if len(unique_ids) == 1 else ContributionRole.CONTRIBUTOR
     for fid in unique_ids:
         db.add(ContributionWorkForeman(work_id=work_id, foreman_id=fid, role=solo_role))
@@ -333,15 +328,36 @@ def list_contribution_works(
         work_type, status_filter, impact_level, financial_gain_status, search,
     )
 
-    all_works = list(db.scalars(query))
-    all_works.sort(key=_sort_key_fn(db, all_works, sort_by), reverse=sort_dir == "desc")
-    total = len(all_works)
-    start = (page.page - 1) * page.page_size
-    page_works = all_works[start : start + page.page_size]
+    if sort_by in ("title", "type", "foreman", "gain"):
+        all_works = list(db.scalars(query))
+        all_works.sort(key=_sort_key_fn(db, all_works, sort_by), reverse=sort_dir == "desc")
+        total = len(all_works)
+        start = (page.page - 1) * page.page_size
+        page_works = all_works[start : start + page.page_size]
+    else:
+        total = db.scalar(select(func.count()).select_from(query.subquery()))
+
+        if sort_by == "plant":
+            query = query.outerjoin(Plant, Plant.id == ContributionWork.plant_id)
+            sort_col = func.coalesce(Plant.sequence_number, -1)
+            order_expr = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
+        elif sort_by == "status":
+            order_expr = ContributionWork.status.desc() if sort_dir == "desc" else ContributionWork.status.asc()
+        else:
+            order_expr = (
+                ContributionWork.work_date.desc().nulls_last()
+                if sort_dir == "desc" else ContributionWork.work_date.asc().nulls_first()
+            )
+
+        query = (
+            query.order_by(order_expr, ContributionWork.id)
+            .offset((page.page - 1) * page.page_size).limit(page.page_size)
+        )
+        page_works = list(db.scalars(query))
 
     return {
         "items": [_to_dict(db, w) for w in page_works],
-        "total": total, "page": page.page, "page_size": page.page_size,
+        "total": total or 0, "page": page.page, "page_size": page.page_size,
     }
 
 
@@ -391,8 +407,9 @@ def contribution_summary(
         by_type[label] = by_type.get(label, 0) + 1
 
     foreman_counts: dict[UUID, int] = {}
-    for w in works:
-        for row in db.scalars(select(ContributionWorkForeman).where(ContributionWorkForeman.work_id == w.id)):
+    work_ids = [w.id for w in works]
+    if work_ids:
+        for row in db.scalars(select(ContributionWorkForeman).where(ContributionWorkForeman.work_id.in_(work_ids))):
             foreman_counts[row.foreman_id] = foreman_counts.get(row.foreman_id, 0) + 1
     foremen_by_id = {f.id: f for f in db.scalars(select(Foreman))}
     top_foremen = sorted(foreman_counts.items(), key=lambda kv: kv[1], reverse=True)[:10]

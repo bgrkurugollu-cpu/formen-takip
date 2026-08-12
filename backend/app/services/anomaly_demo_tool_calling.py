@@ -1,7 +1,3 @@
-"""Gerçek bir LLM API anahtarı olmadığında `tool_calling` modunun demo karşılığı: sabit bir
-araç çağrı sırası gerçekten çalıştırılır (sentetik sağlayıcılara karşı), yalnızca LLM'in hangi
-aracı ne zaman çağıracağına karar verme adımı atlanır; nihai analiz metni `anomaly_demo_fallback`
-ile üretilir."""
 
 from __future__ import annotations
 

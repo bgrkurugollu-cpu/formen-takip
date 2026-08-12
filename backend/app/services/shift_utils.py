@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 
 
+
 def shift_crosses_midnight(start_time: time, end_time: time) -> bool:
     return end_time <= start_time
 

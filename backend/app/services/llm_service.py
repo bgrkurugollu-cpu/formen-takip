@@ -11,25 +11,23 @@ logger = logging.getLogger("app.llm")
 
 
 class LLMNotConfiguredError(Exception):
-    """LLM_ENABLED=false veya API anahtarı tanımlı değil — demo moduna düşülmeli."""
+    pass
 
 
 class LLMRequestError(Exception):
-    """LLM sağlayıcısı hata döndürdü (timeout hariç)."""
+    pass
 
 
 class LLMTimeoutError(Exception):
-    """LLM isteği zaman aşımına uğradı."""
+    pass
 
 
 class LLMResponseInvalidError(Exception):
-    """LLM cevabı JSON olarak ayrıştırılamadı."""
+    pass
 
 
 class LLMToolCallingUnsupportedError(Exception):
-    """Yapılandırılmış model, `tools` parametresini (function/tool calling) desteklemiyor —
-    çağıran taraf (bkz. anomaly_analysis_service.py) bunu `single_context` moduna kontrollü
-    bir düşüşe çevirmelidir."""
+    pass
 
 
 def is_configured() -> bool:
@@ -65,14 +63,6 @@ def _post(payload: dict) -> dict:
 
 
 def call_llm(system_prompt: str, user_message: str, json_schema: dict | None = None, schema_name: str = "response") -> dict:
-    """`single_context` modu için tek turlu, araçsız istek: sistem + kullanıcı mesajı gönderir,
-    yapılandırılmış JSON cevabı sözlük olarak döndürür. Sağlayıcı bağımsız tek servis katmanı
-    burasıdır — ileride farklı bir sağlayıcıya geçmek yalnızca bu dosyanın içini değiştirmeyi
-    gerektirir, çağıran kod değişmez.
-
-    `json_schema` verilirse OpenAI'ın strict structured-outputs modu kullanılır: model, cevabı
-    şemadan sapamayacak şekilde API seviyesinde kısıtlanır. Verilmezse serbest `json_object`
-    moduna düşülür."""
     response_format = (
         {"type": "json_schema", "json_schema": {"name": schema_name, "strict": True, "schema": json_schema}}
         if json_schema is not None
@@ -99,10 +89,6 @@ def call_chat(
     messages: list[dict], tools: list[dict] | None = None, tool_choice: str | None = None,
     response_format: dict | None = None,
 ) -> dict:
-    """`tool_calling` modunun çok turlu orkestrasyonu (bkz. anomaly_orchestrator.py) için ham
-    chat-completions isteği: verilen mesaj geçmişini olduğu gibi gönderir, modelin ürettiği tam
-    mesaj nesnesini (content ve/veya tool_calls içerebilir) döndürür — `call_llm`'in aksine
-    tek bir sabit sistem/kullanıcı mesajı varsaymaz."""
     payload: dict = {"messages": messages, "temperature": 0.2}
     if tools:
         payload["tools"] = tools

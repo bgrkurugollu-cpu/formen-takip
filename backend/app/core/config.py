@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.openai.com/v1"
     llm_timeout_seconds: int = 30
 
-    llm_analysis_mode: str = "single_context"  # "single_context" | "tool_calling"
+    llm_analysis_mode: str = "single_context"
     llm_tool_calling_enabled: bool = True
     llm_demo_tool_calling_enabled: bool = True
     llm_max_tool_calls: int = 10

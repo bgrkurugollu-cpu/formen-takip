@@ -17,10 +17,6 @@ from app.services.providers.base import RawPerformanceRecord
 def derive_agir_gitme(
     measured_gram: float, standard_gram: float, lower_limit: float, upper_limit: float, actual_qty: float
 ) -> tuple[float, float, float] | None:
-    """(actual_value%, numerator, denominator) döner — payda sıfırsa None. Ağır Gitme, standart
-    gramajdan sapma değil, kabul edilen aralığın (lower/upper) dışına çıkmadır: aralık içindeki her
-    ölçüm 0 sapma, aralık dışına taşan kısım işaretli sapmadır. Hem `_kpi_components` (ingestion)
-    hem de `rescoring.py` (mevcut kayıtları düzeltme) aynı bu fonksiyonu kullanır."""
     if measured_gram > upper_limit:
         signed_deviation = measured_gram - upper_limit
     elif measured_gram < lower_limit:
@@ -35,10 +31,6 @@ def derive_agir_gitme(
 
 
 def _kpi_components(record: ProductionRecord, product: Product | None):
-    """Bir üretim kaydından türetilebilecek (kpi_code, actual, numerator, denominator)
-    bileşenlerini üretir. Gerekli ham veri eksikse (None) o KPI için hiçbir şey üretilmez
-    — değer uydurulmaz. Veri PRESENT ama geçersizse (ör. negatif miktar) yine de üretilir;
-    bunu geçersiz (INVALID) olarak işaretlemek ingestion.py'nin işidir, burada değil."""
     actual_qty = float(record.actual_qty) if record.actual_qty is not None else None
     planned_qty = float(record.planned_qty) if record.planned_qty is not None else None
 
@@ -72,9 +64,6 @@ def _kpi_components(record: ProductionRecord, product: Product | None):
     if record.planned_start_at is not None and record.planned_end_at is not None:
         shift_minutes = (record.planned_end_at - record.planned_start_at).total_seconds() / 60.0
         if shift_minutes > 0:
-            # İnkita gerçekleşmesi yalnızca Teknik + İmalat toplamıdır (spec bölüm 3.4/7) — Diğer
-            # duruş `production_records.other_downtime_minutes` üzerinden ayrıca okunabilir ama
-            # puanlamaya hiç dahil edilmez. İkisinden biri eksikse toplam uydurulmaz, KPI atlanır.
             if record.technical_downtime_minutes is not None and record.manufacturing_downtime_minutes is not None:
                 technical_min = float(record.technical_downtime_minutes)
                 manufacturing_min = float(record.manufacturing_downtime_minutes)
@@ -90,18 +79,6 @@ def derive_raw_performance_records(
     duplicate_rate: float = 0.0,
     rng: random.Random | None = None,
 ) -> Iterator[RawPerformanceRecord]:
-    """`production_records` (+ `products`) tablolarından KPI-seviyeli ham kayıtları türetir.
-
-    Kaynak-agnostiktir: `production_records` ister sentetik üretici (`production_generator.py`)
-    ister gerçek bir SAP sağlayıcısı tarafından doldurulmuş olsun bu fonksiyon aynı şekilde
-    çalışır — bu nedenle `ingestion.py`/`kpi_engine.py`/`analytics.py` hiçbir değişiklik
-    gerektirmez; yalnızca `production_records`'ı dolduran katman değişir.
-
-    `target_value` bilinçli olarak None bırakılır — hedef, kaynaktan gelmediği için
-    `ingestion.py`'nin zaten çağırdığı `resolve_target()` üzerinden `kpi_targets`
-    tablosundan (FOREMAN>CHIEF>PLANT>COMPANY önceliğiyle) okunur. Hiçbir hedef
-    bulunamazsa kayıt `NEEDS_SOURCE_CORRECTION` durumuna düşer ve puan hesaplanmaz.
-    """
     plants = {p.id: p for p in db.scalars(select(Plant))}
     if plant_codes:
         plant_ids = {p.id for p in plants.values() if p.code in plant_codes}
@@ -115,8 +92,8 @@ def derive_raw_performance_records(
     foremen = {f.id: f for f in db.scalars(select(Foreman))}
     products = {p.id: p for p in db.scalars(select(Product))}
 
-    working_pairs = {
-        (row.foreman_id, row.work_date)
+    working_triples = {
+        (row.foreman_id, row.work_date, row.plant_id)
         for row in db.scalars(
             select(ForemanWorkCalendar).where(
                 ForemanWorkCalendar.is_working.is_(True),
@@ -133,8 +110,7 @@ def derive_raw_performance_records(
     )
 
     for record in db.scalars(stmt):
-        # Formen çalışma kaydı bulunmadığında üretim formene bağlanmaz.
-        if (record.foreman_id, record.production_date) not in working_pairs:
+        if (record.foreman_id, record.production_date, record.plant_id) not in working_triples:
             continue
 
         plant = plants.get(record.plant_id)

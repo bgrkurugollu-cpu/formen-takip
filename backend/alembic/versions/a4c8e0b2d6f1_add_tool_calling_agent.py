@@ -10,10 +10,6 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# Tool calling destekli analiz ajanı. `anomaly_analysis_status` ve `anomaly_analysis_run_status`
-# enum tiplerine YENİ değerler eklenir (mevcut değerler korunur) — Postgres bir enum tipinden
-# değer SİLMEYİ desteklemez, bu yüzden downgrade() eklenen değerleri geri alamaz (yalnızca yeni
-# tabloları/kolonları düşürür).
 _NEW_STATUS_VALUES = (
     'QUEUED', 'PLANNING', 'COLLECTING_DATA', 'GENERATING_ANALYSIS',
     'COMPLETED_WITH_WARNINGS', 'TIMED_OUT', 'CANCELLED',
@@ -76,6 +72,3 @@ def downgrade() -> None:
     op.drop_column('anomaly_analyses', 'investigation_plan')
     op.drop_column('anomaly_analyses', 'mode')
     postgresql.ENUM(name='analysis_mode').drop(op.get_bind(), checkfirst=True)
-    # NOT: anomaly_analysis_status / anomaly_analysis_run_status enum tiplerine eklenen yeni
-    # değerler (QUEUED, PLANNING, ...) kasıtlı olarak geri alınmaz — Postgres ALTER TYPE ...
-    # DROP VALUE desteklemez (bkz. 6ad63dbc115b migration'ındaki aynı kısıtlama notu).

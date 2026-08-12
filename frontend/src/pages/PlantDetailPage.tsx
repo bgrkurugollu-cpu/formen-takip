@@ -1,21 +1,24 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { FilterBar } from "../components/FilterBar";
 import { Card, EmptyState, ErrorState, LoadingState } from "../components/StateViews";
 import { PerformanceLevelBadge } from "../components/PerformanceLevelBadge";
+import { ForemanShiftComparisonMatrix } from "../components/ForemanShiftComparisonMatrix";
 import { KpiBarChart } from "../components/charts/KpiBarChart";
 import { RankingBarChart } from "../components/charts/RankingBarChart";
-import { RelatedActionPlans } from "../components/RelatedActionPlans";
 import {
   usePlantChiefs, usePlantDetail, usePlantForemen, usePlantKpis, usePlantShifts, usePlantSummary,
 } from "../api/hooks";
 import { useFilters } from "../hooks/useFilters";
+import { withSearchParam } from "../lib/chartDrilldown";
 import { rowHoverClass, rowStyle, tdClass, thClass, theadRowStyle, thStyle } from "../lib/tableStyles";
 
 export function PlantDetailPage() {
   const { plantId } = useParams<{ plantId: string }>();
   const { filters, setFilters, clearFilters, asQueryParams } = useFilters();
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchWithPlant = withSearchParam(location.search, "plant_ids", plantId ?? "");
 
   const plant = usePlantDetail(plantId);
   const summary = usePlantSummary(plantId, asQueryParams);
@@ -50,30 +53,29 @@ export function PlantDetailPage() {
 
       <FilterBar filters={filters} setFilters={setFilters} clearFilters={clearFilters} />
 
-      {summary.data && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Card title="Aktif Formen"><p className="text-xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{summary.data.active_foreman_count}</p></Card>
-          <Card title="Kritik Formen"><p className="text-xl font-semibold tabular-nums text-red-600">{summary.data.critical_foreman_count}</p></Card>
-          <Card title="En Güçlü KPI">
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{summary.data.strongest_kpi?.name ?? "-"}</p>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{summary.data.strongest_kpi?.avg_score.toFixed(1)} puan</p>
-          </Card>
-          <Card title="En Düşük KPI">
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{summary.data.weakest_kpi?.name ?? "-"}</p>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{summary.data.weakest_kpi?.avg_score.toFixed(1)} puan</p>
-          </Card>
-        </div>
-      )}
+      <ForemanShiftComparisonMatrix plantId={plantId!} dateParams={asQueryParams} />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title="KPI Bazlı Performans">
-          {kpis.isLoading ? <LoadingState /> : kpis.data ? <KpiBarChart items={kpis.data.items} /> : <ErrorState />}
+          {kpis.isLoading ? (
+            <LoadingState />
+          ) : kpis.data ? (
+            <KpiBarChart
+              items={kpis.data.items}
+              onSelect={(item) => navigate({ pathname: "/kpis", search: withSearchParam(searchWithPlant, "kpi", item.id) })}
+            />
+          ) : (
+            <ErrorState />
+          )}
         </Card>
         <Card title="Vardiya Karşılaştırması">
           {shifts.isLoading ? (
             <LoadingState />
           ) : shifts.data ? (
-            <RankingBarChart items={shifts.data.items.map((s) => ({ name: s.name, score: s.total_score, color: s.level.color }))} />
+            <RankingBarChart
+              items={shifts.data.items.map((s) => ({ id: s.shift_id, name: s.name, score: s.total_score, color: s.level.color }))}
+              onSelect={(item) => navigate({ pathname: `/shifts/${item.id}`, search: searchWithPlant })}
+            />
           ) : (
             <ErrorState />
           )}
@@ -148,8 +150,6 @@ export function PlantDetailPage() {
           </div>
         )}
       </Card>
-
-      {plantId && <RelatedActionPlans plantId={plantId} />}
     </div>
   );
 }

@@ -9,15 +9,21 @@ from uuid import UUID
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
-from app.models.enums import DataQualityStatus
+from app.models.enums import CalculationType, DataQualityStatus
 from app.models.kpi import Kpi, KpiCalculationRule
 from app.models.organization import Plant
 from app.models.performance import PerformanceRecord, PerformanceScore
 from app.schemas.common import Filters
 from app.services.kpi_engine import (
     MIN_COVERED_WEIGHT_RATIO,
+    CalculationRuleParams,
+    ScoreResult,
     calculate_custom_score,
+    calculate_score,
+    plan_achievement_params,
     score_heavy_weight_from_period_ratio,
+    score_plan_achievement,
+    score_plan_compliance,
     score_plan_compliance_from_period_deviation,
     weighted_geometric_score,
 )
@@ -49,14 +55,12 @@ def _apply_filters(stmt: Select, filters: Filters) -> Select:
         stmt = stmt.where(PerformanceRecord.shift_id.in_(filters.shift_ids))
     if filters.kpi_ids:
         stmt = stmt.where(PerformanceRecord.kpi_id.in_(filters.kpi_ids))
+    if filters.foreman_ids:
+        stmt = stmt.where(PerformanceRecord.foreman_id.in_(filters.foreman_ids))
     return stmt
 
 
 def active_kpi_weight_sum(db: Session, filters: Filters | None = None) -> float:
-    """Kapsanan ağırlık oranının (bkz. MIN_COVERED_WEIGHT_RATIO) payda tarafı. `filters.kpi_ids`
-    doluysa (kullanıcı KPI filtresi seçtiyse) yalnızca seçili KPI'ların ağırlığı toplam sayılır —
-    aksi halde "GSF" gibi tek bir KPI'ya filtrelemek, kapsanan ağırlığı hep %100'ün altında
-    göstererek genel puanı hep 0'a düşürürdü (filtre dışı kalan KPI'lar zaten hiç veri döndürmez)."""
     stmt = select(func.sum(Kpi.weight)).where(Kpi.is_active.is_(True))
     if filters is not None and filters.kpi_ids:
         stmt = stmt.where(Kpi.id.in_(filters.kpi_ids))
@@ -72,13 +76,6 @@ def _active_rules(db: Session) -> dict[UUID, KpiCalculationRule]:
     return {r.kpi_id: r for r in db.scalars(select(KpiCalculationRule).where(KpiCalculationRule.is_active.is_(True)))}
 
 
-# ---------------------------------------------------------------------------------------------
-# Dönemsel toplulaştırma (spec bölüm 11): önce ham pay/payda toplanır, ardından KPI'a özel formüle
-# TEK SEFERDE gönderilir — günlük puanların ortalaması hiçbir yerde alınmaz. Her yardımcı fonksiyon
-# `group_col=None` ile tek bir toplam satır (ör. tekil bir formen için KPI kartı), bir SQL ifadesiyle
-# de (foreman_id, plant_id, date_trunc(...) vb.) grup başına satır döndürebilir — bu sayede
-# plant/foreman/chief/shift/trend kırılımlarının hepsi aynı koddan beslenir.
-# ---------------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -124,9 +121,6 @@ def _kpi_period_stats(
 def _agir_gitme_period_ratio(
     db: Session, filters: Filters, group_col, kpi_id: UUID, extra_where: list | None = None
 ) -> dict:
-    """Üretim ağırlıklı oran (spec bölüm 11.4): sum(denominator * abs(actual)/target) / sum(denominator).
-    Payda (denominator_value) her zaman pozitiftir (standart gramaj x üretim miktarı) — işaretli
-    numerator burada kullanılmaz, yalnızca oranın büyüklüğü ağırlıklandırılır."""
     ratio_expr = func.abs(PerformanceRecord.actual_value) / PerformanceRecord.target_value
     cols = [
         func.sum(PerformanceRecord.denominator_value * ratio_expr).label("weighted_ratio_sum"),
@@ -151,10 +145,35 @@ def _agir_gitme_period_ratio(
     return out
 
 
+def _agir_gitme_avg_actual(
+    db: Session, filters: Filters, group_col, kpi_id: UUID, extra_where: list | None = None
+) -> dict:
+    cols = [
+        func.sum(PerformanceRecord.denominator_value * func.abs(PerformanceRecord.actual_value)).label("weighted_abs_sum"),
+        func.sum(PerformanceRecord.denominator_value).label("denominator_sum"),
+    ]
+    if group_col is not None:
+        cols = [group_col.label("key")] + cols
+    stmt = select(*cols).where(
+        PerformanceRecord.kpi_id == kpi_id, PerformanceRecord.data_quality_status == DataQualityStatus.COMPLETE
+    )
+    if extra_where:
+        stmt = stmt.where(*extra_where)
+    if group_col is not None:
+        stmt = stmt.group_by(group_col)
+    stmt = _apply_filters(stmt, filters)
+
+    out = {}
+    for row in db.execute(stmt):
+        key = row.key if group_col is not None else None
+        denom = float(row.denominator_sum or 0.0)
+        out[key] = (float(row.weighted_abs_sum or 0.0) / denom) if denom else 0.0
+    return out
+
+
 def _plana_uyum_period_deviation(
     db: Session, filters: Filters, group_col, kpi_id: UUID, extra_where: list | None = None
 ) -> dict:
-    """Mutlak sapmaların toplamı (spec bölüm 11.5, birbirini götürmeyen): sum(abs(fiili - plan)) / sum(plan) * 100."""
     cols = [
         func.sum(func.abs(PerformanceRecord.numerator_value - PerformanceRecord.denominator_value)).label("abs_dev_sum"),
         func.sum(PerformanceRecord.denominator_value).label("denominator_sum"),
@@ -178,13 +197,39 @@ def _plana_uyum_period_deviation(
     return out
 
 
+def _plana_uyum_period_score_v3(
+    db: Session, filters: Filters, group_col, kpi_id: UUID, params: dict, extra_where: list | None = None
+) -> dict:
+    cols = [PerformanceRecord.numerator_value, PerformanceRecord.denominator_value]
+    if group_col is not None:
+        cols = [group_col.label("key")] + cols
+    stmt = select(*cols).where(
+        PerformanceRecord.kpi_id == kpi_id, PerformanceRecord.data_quality_status == DataQualityStatus.COMPLETE,
+        PerformanceRecord.numerator_value.isnot(None), PerformanceRecord.denominator_value.isnot(None),
+    )
+    if extra_where:
+        stmt = stmt.where(*extra_where)
+    stmt = _apply_filters(stmt, filters)
+
+    plan_kwargs = plan_achievement_params(params)
+    weighted_sum: dict[UUID | None, float] = defaultdict(float)
+    weight_sum: dict[UUID | None, float] = defaultdict(float)
+    for row in db.execute(stmt):
+        key = row.key if group_col is not None else None
+        planned = float(row.denominator_value)
+        actual = float(row.numerator_value)
+        if planned <= 0:
+            continue
+        result = score_plan_achievement(planned=planned, actual=actual, **plan_kwargs)
+        weighted_sum[key] += result.capped_score * planned
+        weight_sum[key] += planned
+
+    return {key: total / weight_sum[key] for key, total in weighted_sum.items() if weight_sum[key] > 0}
+
+
 def _kpi_period_scores(
     db: Session, filters: Filters, group_col, kpi: Kpi, rule: KpiCalculationRule | None, extra_where: list | None = None
 ) -> dict:
-    """Bir KPI için grup başına (ScoreResult, _KpiPeriodStats) döner. Ağır Gitme/Plana Uyum kendi
-    özel toplulaştırmalarını kullanır; GSF/Iskarta/İnkita (ve gelecekteki her ratio-vs-target
-    custom KPI) ortak sum/sum-vs-ağırlıklı-hedef desenini paylaşır — hepsi aynı KPI'a özel
-    formülleri (kpi_engine.py) çağırır, günlük skorların ortalaması hiçbir zaman alınmaz."""
     stats_by_key = _kpi_period_stats(db, filters, group_col, kpi.id, extra_where=extra_where)
     stats_by_key = {k: s for k, s in stats_by_key.items() if s.denominator_sum > 0}
     if not stats_by_key:
@@ -203,6 +248,12 @@ def _kpi_period_scores(
         }
 
     if kpi.code == "PLANA_UYUM":
+        if formula_type == "ASYMMETRIC_PLAN_ACHIEVEMENT":
+            score_by_key = _plana_uyum_period_score_v3(db, filters, group_col, kpi.id, params, extra_where=extra_where)
+            return {
+                key: (ScoreResult(raw_score=score_by_key[key], capped_score=score_by_key[key]), stats)
+                for key, stats in stats_by_key.items() if key in score_by_key
+            }
         dev_by_key = _plana_uyum_period_deviation(db, filters, group_col, kpi.id, extra_where=extra_where)
         limit = params.get("normal_deviation_limit", 5.0)
         coef = params.get("excess_deviation_coefficient", 10.0)
@@ -245,8 +296,6 @@ def _grouped_scores(
         components = [(score, weight) for score, weight, _ in items]
         covered_weight = sum(weight for _, weight, _ in items)
         record_count = sum(count for _, _, count in items)
-        # Kapsanan ağırlık toplam ağırlığın yarısının altındaysa genel puan üretilmez (spec bölüm 10:
-        # "eksik KPI sayısı izin verilen sınırı aşarsa genel puan üretme") — bkz. MIN_COVERED_WEIGHT_RATIO.
         insufficient = covered_weight < (total_active_weight * MIN_COVERED_WEIGHT_RATIO)
         is_reliable = (not insufficient) and covered_weight >= (total_active_weight - WEIGHT_TOLERANCE)
         total_score = 0.0 if insufficient else weighted_geometric_score(components)
@@ -290,9 +339,6 @@ class ChiefTeamScore:
 
 
 def chief_team_scores(db: Session, filters: Filters) -> list[ChiefTeamScore]:
-    """Şef ekip puanı: formen puanlarının ortalaması DEĞİL, şefin sorumluluğundaki tüm
-    kayıtların toplam pay/paydasından doğrudan yeniden hesaplanan tek bir puan. Formen
-    kırılımı (foreman_scores) ayrıca, her formenin kendi doğru puanıyla sağlanır."""
     chief_scores_by_id = {s.key: s for s in chief_scores(db, filters)}
     foreman_scores_by_id = {s.key: s for s in foreman_scores(db, filters)}
 
@@ -375,12 +421,17 @@ def kpi_breakdown(db: Session, filters: Filters, foreman_id: UUID | None = None)
         score_result, stats = entry
         weight = float(kpi.weight)
         avg_target = (stats.expected_sum / stats.denominator_sum * 100) if stats.denominator_sum else None
-        avg_actual = (stats.numerator_sum / stats.denominator_sum * 100) if stats.denominator_sum else None
+        if kpi.code == "AGIR_GITME":
+            avg_actual = _agir_gitme_avg_actual(db, filters, None, kpi.id, extra_where=extra_where).get(None)
+        else:
+            avg_actual = (stats.numerator_sum / stats.denominator_sum * 100) if stats.denominator_sum else None
         results.append(
             {
                 "kpi_id": kpi.id,
                 "avg_target": avg_target,
                 "avg_actual": avg_actual,
+                "numerator_sum": stats.numerator_sum,
+                "denominator_sum": stats.denominator_sum,
                 "avg_raw_score": score_result.raw_score,
                 "avg_capped_score": score_result.capped_score,
                 "weight": weight,
@@ -394,6 +445,64 @@ def kpi_breakdown(db: Session, filters: Filters, foreman_id: UUID | None = None)
 
 def foreman_kpi_breakdown(db: Session, filters: Filters, foreman_id: UUID) -> list[dict]:
     return kpi_breakdown(db, filters, foreman_id=foreman_id)
+
+
+@dataclass
+class ForemanKpiValue:
+    foreman_id: UUID
+    avg_actual: float
+    avg_target: float
+    capped_score: float
+    record_count: int
+
+
+def _point_score(kpi: Kpi, rule: KpiCalculationRule | None, actual: float, target: float) -> float:
+    params: dict = (rule.parameters if rule else {}) or {}
+    if kpi.calculation_type == CalculationType.CUSTOM_FORMULA:
+        formula_type = params.get("formula_type")
+        if formula_type == "ASYMMETRIC_PLAN_ACHIEVEMENT":
+            result = score_plan_achievement(planned=target, actual=actual, **plan_achievement_params(params))
+        elif formula_type == "PIECEWISE_LINEAR_LOGARITHMIC":
+            result = score_plan_compliance(
+                planned=target, actual=actual,
+                normal_deviation_limit=params.get("normal_deviation_limit", 5.0),
+                excess_deviation_coefficient=params.get("excess_deviation_coefficient", 10.0),
+            )
+        else:
+            result = calculate_custom_score(actual, target, formula_type, params)
+        return result.capped_score
+    rule_params = CalculationRuleParams(
+        calculation_type=kpi.calculation_type, min_score=float(kpi.min_score), max_score=float(kpi.max_score), **params
+    )
+    return calculate_score(actual, target, rule_params).capped_score
+
+
+def foreman_kpi_values(db: Session, filters: Filters, kpi: Kpi, reference_target: float) -> list[ForemanKpiValue]:
+    rule = _active_rules(db).get(kpi.id)
+    stats_by_foreman = _kpi_period_stats(db, filters, PerformanceRecord.foreman_id, kpi.id)
+    agir_gitme_actual_by_foreman = (
+        _agir_gitme_avg_actual(db, filters, PerformanceRecord.foreman_id, kpi.id)
+        if kpi.code == "AGIR_GITME" else {}
+    )
+    results = []
+    for foreman_id, stats in stats_by_foreman.items():
+        if stats.denominator_sum <= 0:
+            continue
+        if kpi.code == "AGIR_GITME":
+            avg_actual = agir_gitme_actual_by_foreman.get(foreman_id, 0.0)
+        else:
+            avg_actual = stats.numerator_sum / stats.denominator_sum * 100
+        avg_target = stats.expected_sum / stats.denominator_sum * 100
+        results.append(
+            ForemanKpiValue(
+                foreman_id=foreman_id,
+                avg_actual=avg_actual,
+                avg_target=avg_target,
+                capped_score=_point_score(kpi, rule, avg_actual, reference_target),
+                record_count=stats.record_count,
+            )
+        )
+    return results
 
 
 def latest_foreman_kpi_record(db: Session, foreman_id: UUID, kpi_id: UUID):

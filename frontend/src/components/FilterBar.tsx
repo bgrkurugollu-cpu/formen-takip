@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
-import { useFilterOptions } from "../api/hooks";
-import { DATE_PRESETS, type FilterState } from "../hooks/useFilters";
+import { useFilterOptions, useForemen, useForemenByIds } from "../api/hooks";
+import { DATE_PRESETS, defaultDateRange, type FilterState } from "../hooks/useFilters";
 
 interface Props {
   filters: FilterState;
@@ -127,6 +127,124 @@ export function MultiSelect({
   );
 }
 
+function ForemanFilterSelect({
+  selected,
+  onChange,
+}: {
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const results = useForemen({ search: query || undefined, page_size: 8 });
+
+  const toggle = (id: string) => {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  };
+
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => (open ? close() : setOpen(true))}
+        className={`flex min-w-32 items-center justify-between gap-2 ${inputClass}`}
+        style={inputStyle}
+      >
+        <span>
+          Formen
+          {selected.length > 0 && <span className="ml-1 font-medium" style={{ color: "var(--accent)" }}>({selected.length})</span>}
+        </span>
+        <ChevronDown size={13} strokeWidth={2} style={{ color: "var(--text-muted)" }} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={close} />
+          <div
+            className="absolute z-20 mt-1 w-72 rounded-md shadow-lg"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <div className="p-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
+              <input
+                autoFocus
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Ad, soyad veya sicil no ara..."
+                className="w-full rounded border px-2 py-1 text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                style={inputStyle}
+              />
+            </div>
+            <div className="max-h-64 overflow-auto p-1">
+              {results.isLoading && (
+                <div className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>Aranıyor...</div>
+              )}
+              {results.data && results.data.items.length === 0 && (
+                <div className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>Eşleşen formen yok</div>
+              )}
+              {results.data?.items.map((f) => (
+                <label
+                  key={f.id}
+                  className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-[var(--page-bg)]"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 shrink-0"
+                    checked={selected.includes(f.id)}
+                    onChange={() => toggle(f.id)}
+                  />
+                  <span className="min-w-0 truncate">
+                    {f.full_name} <span style={{ color: "var(--text-muted)" }}>— {f.employee_number}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface ActiveChip {
+  key: string;
+  label: string;
+  onRemove: () => void;
+}
+
+function ActiveFiltersStrip({ chips }: { chips: ActiveChip[] }) {
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-t px-3 py-2" style={{ borderColor: "var(--border)" }}>
+      <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+        Aktif filtreler:
+      </span>
+      {chips.map((chip) => (
+        <span
+          key={chip.key}
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
+          style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
+        >
+          {chip.label}
+          <button type="button" onClick={chip.onRemove} className="hover:opacity-70" aria-label={`${chip.label} filtresini kaldır`}>
+            <X size={11} strokeWidth={2.5} />
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function summarizeNames(names: string[], max = 2): string {
+  if (names.length <= max) return names.join(", ");
+  return `${names.slice(0, max).join(", ")} +${names.length - max}`;
+}
+
 export function FilterBar({ filters, setFilters, clearFilters }: Props) {
   const { data: options, isLoading } = useFilterOptions(
     filters.plantIds.join(",") || undefined,
@@ -134,7 +252,14 @@ export function FilterBar({ filters, setFilters, clearFilters }: Props) {
   );
 
   const activeCount =
-    filters.plantIds.length + filters.factoryIds.length + filters.chiefIds.length + filters.shiftIds.length + filters.kpiIds.length;
+    filters.plantIds.length + filters.factoryIds.length + filters.chiefIds.length +
+    filters.shiftIds.length + filters.kpiIds.length + filters.foremanIds.length;
+
+  const foremenLookup = useForemenByIds(filters.foremanIds);
+  const foremanNameById = useMemo(
+    () => new Map((foremenLookup.data?.items ?? []).map((f) => [f.id, f.full_name])),
+    [foremenLookup.data]
+  );
 
   const plantNameById = useMemo(
     () => new Map((options?.plants ?? []).map((p) => [p.id, p.name])),
@@ -184,10 +309,72 @@ export function FilterBar({ filters, setFilters, clearFilters }: Props) {
     });
   };
 
+  const factoryNameById = useMemo(
+    () => new Map((options?.factories ?? []).map((f) => [f.id, f.name])),
+    [options]
+  );
+  const chiefNameById = useMemo(() => new Map(chiefOptions.map((c) => [c.id, c.name])), [chiefOptions]);
+  const shiftNameById = useMemo(
+    () => new Map((options?.shifts ?? []).map((s) => [s.id, s.name])),
+    [options]
+  );
+  const kpiNameById = useMemo(
+    () => new Map((options?.kpis ?? []).map((k) => [k.id, k.name])),
+    [options]
+  );
+
+  const dateRangeLabel = `${filters.dateFrom} – ${filters.dateTo}`;
+
+  const chips: ActiveChip[] = [
+    { key: "date", label: `Tarih: ${dateRangeLabel}`, onRemove: () => { const [from, to] = defaultDateRange(); setFilters({ dateFrom: from, dateTo: to }); } },
+    ...(filters.factoryIds.length > 0
+      ? [{
+          key: "factory",
+          label: `Fabrika: ${summarizeNames(filters.factoryIds.map((id) => factoryNameById.get(id) ?? id))}`,
+          onRemove: () => handleFactoryChange([]),
+        }]
+      : []),
+    ...(filters.plantIds.length > 0
+      ? [{
+          key: "plant",
+          label: `Tesis: ${summarizeNames(filters.plantIds.map((id) => plantNameById.get(id) ?? id))}`,
+          onRemove: () => handlePlantChange([]),
+        }]
+      : []),
+    ...(filters.chiefIds.length > 0
+      ? [{
+          key: "chief",
+          label: `Şef: ${summarizeNames(filters.chiefIds.map((id) => chiefNameById.get(id) ?? id))}`,
+          onRemove: () => setFilters({ chiefIds: [] }),
+        }]
+      : []),
+    ...(filters.shiftIds.length > 0
+      ? [{
+          key: "shift",
+          label: `Vardiya: ${summarizeNames(filters.shiftIds.map((id) => shiftNameById.get(id) ?? id))}`,
+          onRemove: () => setFilters({ shiftIds: [] }),
+        }]
+      : []),
+    ...(filters.kpiIds.length > 0
+      ? [{
+          key: "kpi",
+          label: `KPI: ${summarizeNames(filters.kpiIds.map((id) => kpiNameById.get(id) ?? id))}`,
+          onRemove: () => setFilters({ kpiIds: [] }),
+        }]
+      : []),
+    ...(filters.foremanIds.length > 0
+      ? [{
+          key: "foreman",
+          label: `Formen: ${summarizeNames(filters.foremanIds.map((id) => foremanNameById.get(id) ?? id))}`,
+          onRemove: () => setFilters({ foremanIds: [] }),
+        }]
+      : []),
+  ];
+
   return (
+    <div className="sticky top-0 z-30 rounded-lg shadow-sm" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
     <div
-      className="flex flex-wrap items-center gap-2 rounded-lg p-3"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      className="flex flex-wrap items-center gap-2 p-3"
     >
       <select
         className={inputClass}
@@ -277,6 +464,10 @@ export function FilterBar({ filters, setFilters, clearFilters }: Props) {
         onChange={(ids) => setFilters({ kpiIds: ids })}
         disabled={isLoading}
       />
+      <ForemanFilterSelect
+        selected={filters.foremanIds}
+        onChange={(ids) => setFilters({ foremanIds: ids })}
+      />
 
       {activeCount > 0 && (
         <button
@@ -288,6 +479,8 @@ export function FilterBar({ filters, setFilters, clearFilters }: Props) {
           Filtreleri temizle ({activeCount})
         </button>
       )}
+    </div>
+    <ActiveFiltersStrip chips={chips} />
     </div>
   );
 }

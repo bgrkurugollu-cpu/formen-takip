@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,8 +15,11 @@ class PerformanceRecord(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("source_system", "source_record_id", name="uq_perf_record_source"),
         UniqueConstraint(
-            "foreman_id", "kpi_id", "chief_id", "shift_id", "performance_date",
+            "foreman_id", "kpi_id", "chief_id", "shift_id", "performance_date", "plant_id",
             name="uq_perf_record_natural_key",
+        ),
+        ForeignKeyConstraint(
+            ["plant_id", "chief_id"], ["plants.id", "plants.chief_id"], name="fk_performance_records_plant_chief"
         ),
     )
 
@@ -32,9 +35,6 @@ class PerformanceRecord(TimestampMixin, Base):
     shift_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shifts.id"), nullable=False, index=True)
     foreman_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("foremen.id"), nullable=False, index=True)
     kpi_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kpis.id"), nullable=False, index=True)
-    # Bu KPI sonucunun türetildiği ham üretim kaydı — izlenebilirlik için (hangi gerçek
-    # değer/ölçüm/parti bu sonuca yol açtı). Nullable: performans kaydı üretim kaydı
-    # olmadan da (ör. doğrudan SAP'ten KPI-seviyeli veri gelirse) var olabilir.
     production_record_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("production_records.id", ondelete="SET NULL"), index=True
     )

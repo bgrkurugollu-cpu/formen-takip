@@ -10,9 +10,6 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# NOT: SQLAlchemy'nin Enum tipi, Python enum üyelerini varsayılan olarak `.value` değil
-# `.name` ile veritabanına yazar — bu yüzden burada app/models/enums.py'daki üye adları
-# (büyük harf) kullanılıyor, `.value` küçük harfleri değil.
 ANOMALY_TYPE = (
     'SHIFT_UNDERPERFORMANCE', 'RISING_TREND', 'FOREMAN_DEVIATION', 'PRODUCT_GROUP_DEVIATION',
     'DOWNTIME_CONCENTRATION', 'PLAN_ADHERENCE_STREAK', 'PLANT_HISTORICAL_DEVIATION',

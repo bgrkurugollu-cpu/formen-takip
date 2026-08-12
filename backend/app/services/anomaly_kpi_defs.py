@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from app.models.enums import AnomalyType
 
-# Sentetik senaryo kataloğu ve LLM bağlam paketi ile arayüzün her ikisi de bu sabit
-# tanımları paylaşır — KPI'nın iyi/kötü yönü ve uyarı eşikleri tek yerde tutulur.
 KPI_DEFINITIONS: dict[str, dict] = {
     "AGIR_GITME": {
         "name": "Ağır Gitme Oranı",
@@ -49,8 +47,8 @@ KPI_DEFINITIONS: dict[str, dict] = {
     "PLANA_UYUM": {
         "name": "Plana Uyum Oranı",
         "description": (
-            "Gerçekleşen üretimin, güncel (revize) üretim planına göre mutlak sapması "
-            "(plan altı ve plan üstü eşit ağırlıkta sapma sayılır)."
+            "Gerçekleşen üretimin, güncel (revize) üretim planına göre yönlü sapması "
+            "(planın üzerinde üretim ödüllendirilir, planın altında üretim daha güçlü cezalandırılır)."
         ),
         "desired_direction": "high",
         "warning_threshold": 90.0,

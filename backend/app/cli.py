@@ -8,8 +8,10 @@ from datetime import date, datetime, timedelta
 
 from app.core.security import hash_password
 from app.db.session import SessionLocal
+from app.models.foreman import Foreman
 from app.models.user import User
 from app.services.ingestion import backfill_data_quality_issues, run_ingestion
+from app.services.monthly_foreman_report import get_or_generate_monthly_report, latest_completed_period
 from app.services.providers.synthetic_provider import SyntheticDataProvider
 from app.services.rescoring import apply_scoring_model_v2
 from app.services.synthetic.anomaly_generator import seed_anomalies
@@ -169,6 +171,49 @@ def cmd_seed_anomalies(args: argparse.Namespace) -> None:
         db.close()
 
 
+def cmd_generate_monthly_reports(args: argparse.Namespace) -> None:
+    db = SessionLocal()
+    try:
+        from sqlalchemy import select
+
+        if args.year and args.month:
+            year, month = args.year, args.month
+        else:
+            year, month = latest_completed_period()
+        print(f"Aylık formen raporları oluşturuluyor ({year}-{month:02d})...")
+
+        foreman_ids = list(db.scalars(select(Foreman.id).where(Foreman.is_active.is_(True))))
+        created = 0
+        already_existed = 0
+        errors = 0
+        for foreman_id in foreman_ids:
+            try:
+                before = _report_exists(db, foreman_id, year, month)
+                get_or_generate_monthly_report(db, foreman_id, year, month)
+                already_existed += 1 if before else 0
+                created += 0 if before else 1
+            except ValueError as exc:
+                errors += 1
+                print(f"  -> {foreman_id}: {exc}")
+        print(f"  -> oluşturulan: {created}, zaten mevcut: {already_existed}, hata: {errors}")
+    finally:
+        db.close()
+
+
+def _report_exists(db, foreman_id, year: int, month: int) -> bool:
+    from sqlalchemy import select
+
+    from app.models.foreman_report import ForemanMonthlyReport
+
+    return db.scalar(
+        select(ForemanMonthlyReport.id).where(
+            ForemanMonthlyReport.foreman_id == foreman_id,
+            ForemanMonthlyReport.year == year,
+            ForemanMonthlyReport.month == month,
+        )
+    ) is not None
+
+
 def cmd_regenerate_personnel(args: argparse.Namespace) -> None:
     db = SessionLocal()
     try:
@@ -237,6 +282,16 @@ def main() -> None:
     )
     anomalies_parser.add_argument("--seed", type=int, default=42)
     anomalies_parser.set_defaults(func=cmd_seed_anomalies)
+
+    monthly_reports_parser = sub.add_parser(
+        "generate-monthly-reports",
+        help="Aktif her formen için aylık bireysel değerlendirme raporu üretir (idempotent — "
+        "zaten oluşturulmuş formen+ay kombinasyonları atlanır); --year/--month verilmezse en son "
+        "tamamlanmış ay kullanılır",
+    )
+    monthly_reports_parser.add_argument("--year", type=int, default=None)
+    monthly_reports_parser.add_argument("--month", type=int, default=None)
+    monthly_reports_parser.set_defaults(func=cmd_generate_monthly_reports)
 
     args = parser.parse_args()
     args.func(args)

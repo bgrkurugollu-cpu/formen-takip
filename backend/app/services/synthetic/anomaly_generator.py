@@ -14,9 +14,6 @@ from app.models.kpi import Kpi
 from app.models.organization import Factory, Plant, Shift
 from app.services.anomaly_kpi_defs import KPI_DEFINITIONS
 
-# Her senaryo: (tür, kpi_code, fabrika_tercihi, önem, vardiyaya_özel, tespit_günü_önce,
-# dönem_gün_sayısı, etkilenen_gün_oranı, sapma_yüzdesi_aralığı).
-# 13 tespit türünün her birini en az bir kez temsil eden 24 sabit senaryo tanımlanmıştır.
 _SCENARIOS: list[dict] = [
     dict(type=AnomalyType.SHIFT_UNDERPERFORMANCE, kpi="PLANA_UYUM", factory="K1", severity="high",
          shift_specific=True, days_ago=2, period_days=21, affected_ratio=0.76, dev_range=(-14.0, -10.0)),
@@ -157,8 +154,6 @@ def _build_case(spec: dict, index: int, ref: dict, rng: random.Random, today: da
     expected_value = round(baseline + rng.uniform(-1.5, 1.5), 2) if higher_is_better else round(
         max(0.5, baseline + rng.uniform(-0.8, 0.8)), 2
     )
-    # deviation_percent işaretine göre observed_value türetilir: higher_is_better KPI'larda
-    # negatif sapma kötüdür (plandan geri kalma); lower_is_better KPI'larda pozitif sapma kötüdür (oranın artması).
     observed_value = round(expected_value * (1 + deviation_percent / 100), 2)
 
     shift = None
@@ -211,9 +206,6 @@ def _build_case(spec: dict, index: int, ref: dict, rng: random.Random, today: da
     if shift is not None:
         evidence.append({"type": "metric", "label": f"{shift.name} ortalaması", "value": observed_value, "unit": "%"})
 
-    # foreman_ids, FOREMAN_DEVIATION senaryosu için generate_anomaly_fixtures() içinde,
-    # gerçek atama tablosundan seçilen formenin id'siyle doldurulur; LLM'e gönderilen
-    # bağlamda isim değil sicil kodu kullanılır (bkz. anomaly_context.py — güvenlik gereksinimi).
     foreman_ids: list[str] = []
 
     ml_confidence = round(min(0.99, 0.72 + spec["affected_ratio"] * 0.2 + rng.uniform(-0.03, 0.05)), 3)
@@ -293,8 +285,6 @@ def _build_case(spec: dict, index: int, ref: dict, rng: random.Random, today: da
 
 
 def generate_anomaly_fixtures(db: Session, rng: random.Random, today: date | None = None) -> list[dict]:
-    """24 sabit senaryodan, mevcut tesis/vardiya/KPI referans verisine bağlı, tutarlı sentetik
-    ML tespiti sözlükleri üretir. Aynı `rng` (aynı seed) ile tekrar çağrıldığında aynı sonucu verir."""
     ref = _load_reference(db)
     today = today or date.today()
     cases = []

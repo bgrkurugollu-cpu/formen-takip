@@ -107,21 +107,26 @@ def list_reports(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     total = db.scalar(select(func.count()).select_from(ReportExport))
-    exports = db.scalars(
+    exports = list(db.scalars(
         select(ReportExport).order_by(ReportExport.created_at.desc())
         .offset((page.page - 1) * page.page_size).limit(page.page_size)
+    ))
+
+    requester_ids = {e.requested_by_user_id for e in exports}
+    requesters_by_id = (
+        {u.id: u for u in db.scalars(select(User).where(User.id.in_(requester_ids)))} if requester_ids else {}
     )
-    items = []
-    for e in exports:
-        requester = db.get(User, e.requested_by_user_id)
-        items.append(
-            {
-                "id": str(e.id), "file_name": e.file_name, "report_type": e.report_type.value,
-                "format": e.format.value, "row_count": e.row_count, "status": e.status.value,
-                "requested_by": requester.full_name if requester else None,
-                "created_at": e.created_at.isoformat(),
-            }
-        )
+
+    items = [
+        {
+            "id": str(e.id), "file_name": e.file_name, "report_type": e.report_type.value,
+            "format": e.format.value, "row_count": e.row_count, "status": e.status.value,
+            "requested_by": requesters_by_id[e.requested_by_user_id].full_name
+            if e.requested_by_user_id in requesters_by_id else None,
+            "created_at": e.created_at.isoformat(),
+        }
+        for e in exports
+    ]
     return {"items": items, "total": total or 0, "page": page.page, "page_size": page.page_size}
 
 

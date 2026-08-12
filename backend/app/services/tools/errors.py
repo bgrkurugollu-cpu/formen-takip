@@ -19,9 +19,6 @@ class ToolErrorCode(str, enum.Enum):
 
 
 class ToolError(Exception):
-    """Bir aracın çalıştırılması sırasında oluşan, LLM'e yapılandırılmış biçimde geri
-    bildirilecek hata. LLM bu durumda veri uydurmamalı, eksikliği nihai analizde
-    belirtmelidir — orkestratör bunu zorunlu kılmaz ama sistem promptu bunu açıkça ister."""
 
     def __init__(self, code: ToolErrorCode, message: str, retryable: bool = False):
         super().__init__(message)

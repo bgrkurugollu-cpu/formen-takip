@@ -10,7 +10,7 @@ from app.core.turkish import turkish_sort_key
 from app.db.session import get_db
 from app.models.foreman import Chief, Foreman, ForemanAssignment
 from app.models.kpi import Kpi
-from app.models.organization import Factory, Plant, Shift
+from app.models.organization import Factory, Plant
 from app.schemas.common import Filters, PageParams, common_filters, page_params
 from app.services import analytics
 from app.services.kpi_engine import resolve_performance_level
@@ -157,6 +157,8 @@ def get_chief(
         "full_name": f"{chief.first_name} {chief.last_name}",
         "hire_date": chief.hire_date.isoformat(),
         "is_active": chief.is_active,
+        "phone_number": chief.phone_number,
+        "email": chief.email,
         "plants": [{"id": str(p.id), "name": p.name} for p in chief_plants],
         "factory": {"id": str(factory.id), "code": factory.code, "name": factory.name} if factory else None,
         "foreman_count": my_team.foreman_count if my_team else 0,
@@ -183,28 +185,15 @@ def chief_foremen(
     foremen_by_id = (
         {f.id: f for f in db.scalars(select(Foreman).where(Foreman.id.in_([s.key for s in scores])))} if scores else {}
     )
-    shifts_by_id = {s.id: s for s in db.scalars(select(Shift))}
-    shift_by_foreman = {
-        a.foreman_id: shifts_by_id.get(a.shift_id)
-        for a in db.scalars(
-            select(ForemanAssignment).where(
-                ForemanAssignment.chief_id == chief_id,
-                ForemanAssignment.start_date <= filters.date_to,
-                (ForemanAssignment.end_date.is_(None)) | (ForemanAssignment.end_date >= filters.date_from),
-            ).order_by(ForemanAssignment.start_date)
-        )
-    }
 
     items = []
     for s in sorted(scores, key=lambda x: x.total_score, reverse=True):
         f = foremen_by_id.get(s.key)
-        shift = shift_by_foreman.get(s.key)
         items.append(
             {
                 "id": str(s.key),
                 "employee_number": f.employee_number if f else None,
                 "full_name": f"{f.first_name} {f.last_name}" if f else None,
-                "shift": {"id": str(shift.id), "name": shift.name} if shift else None,
                 "total_score": round(s.total_score, 2),
                 "is_reliable": s.is_reliable,
                 "level": level_to_dict(resolve_performance_level(s.total_score, levels)),
@@ -261,9 +250,20 @@ def chief_kpis(
                 "note": "Diğer duruş süresi puana dahil edilmez.",
             }
         elif kpi.code == "PLANA_UYUM" and avg_actual is not None:
-            direction = "OVER_PLAN" if avg_actual > 100 else ("UNDER_PLAN" if avg_actual < 100 else "ON_PLAN")
+            planned_qty = row.get("denominator_sum")
+            actual_qty = row.get("numerator_sum")
+            kg_diff = (actual_qty - planned_qty) if (planned_qty is not None and actual_qty is not None) else None
+            signed_pct_deviation = (kg_diff / planned_qty * 100.0) if (kg_diff is not None and planned_qty) else None
+            direction = (
+                "ABOVE_PLAN" if (signed_pct_deviation or 0) > 0
+                else ("BELOW_PLAN" if (signed_pct_deviation or 0) < 0 else "ON_PLAN")
+            )
             item["plana_uyum"] = {
                 "avg_attainment_pct": round(avg_actual, kpi.decimal_places),
+                "planned_qty": round(planned_qty, 2) if planned_qty is not None else None,
+                "actual_qty": round(actual_qty, 2) if actual_qty is not None else None,
+                "kg_diff": round(kg_diff, 2) if kg_diff is not None else None,
+                "signed_pct_deviation": round(signed_pct_deviation, 2) if signed_pct_deviation is not None else None,
                 "direction": direction,
             }
         items.append(item)

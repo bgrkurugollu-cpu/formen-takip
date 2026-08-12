@@ -21,11 +21,6 @@ class Factory(TimestampMixin, Base):
 
 
 class Plant(TimestampMixin, Base):
-    """Bir şef birden fazla tesise sorumlu olabilir (bkz. `Chief.plants`), ama her tesisin
-    tam olarak bir şefi vardır — bu invariant `chief_id`'nin NOT NULL olmasıyla ve
-    `uq_plants_id_chief_id`'nin `foreman_assignments`/`foreman_work_calendar`/
-    `production_records`'daki (plant_id, chief_id) kompozit FK'lerinin hedefi olmasıyla
-    DB seviyesinde garanti edilir."""
 
     __tablename__ = "plants"
     __table_args__ = (

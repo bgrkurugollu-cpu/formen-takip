@@ -1,17 +1,35 @@
 import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { KeyboardEvent } from "react";
 import type { KpiSummaryItem } from "../../api/types";
 import { accentLineColor, resolveChartInk } from "../../lib/chartColors";
 import { useTheme } from "../../context/ThemeContext";
 import { EmptyState } from "../StateViews";
 
-export function KpiBarChart({ items }: { items: KpiSummaryItem[] }) {
+export interface KpiBarChartDatum {
+  id: string;
+  name: string;
+  score: number;
+  unit: string;
+}
+
+export function KpiBarChart({
+  items,
+  onSelect,
+}: {
+  items: KpiSummaryItem[];
+  onSelect?: (item: KpiBarChartDatum) => void;
+}) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const ink = resolveChartInk(isDark);
 
   if (items.length === 0) return <EmptyState />;
 
-  const data = items.map((i) => ({ name: i.name, score: i.avg_score, unit: i.unit }));
+  const data: KpiBarChartDatum[] = items.map((i) => ({ id: i.kpi_id, name: i.name, score: i.avg_score, unit: i.unit }));
+
+  const handleSelect = (entry: { payload?: KpiBarChartDatum }) => {
+    if (onSelect && entry.payload?.id) onSelect(entry.payload);
+  };
 
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -29,7 +47,23 @@ export function KpiBarChart({ items }: { items: KpiSummaryItem[] }) {
           labelStyle={{ color: ink.primary }}
           itemStyle={{ color: ink.primary }}
         />
-        <Bar dataKey="score" fill={accentLineColor(isDark)} radius={[4, 4, 0, 0]} barSize={40} />
+        <Bar
+          dataKey="score"
+          fill={accentLineColor(isDark)}
+          radius={[4, 4, 0, 0]}
+          barSize={40}
+          cursor={onSelect ? "pointer" : undefined}
+          tabIndex={onSelect ? 0 : undefined}
+          role={onSelect ? "button" : undefined}
+          onClick={handleSelect}
+          onKeyDown={(entry: { payload?: KpiBarChartDatum }, _index: number, e: KeyboardEvent) => {
+            if (!onSelect) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleSelect(entry);
+            }
+          }}
+        />
       </BarChart>
     </ResponsiveContainer>
   );
